@@ -1225,6 +1225,7 @@ const OWN_TABS = [
   { id:"services",  icon:"✂️",  label:"الخدمات" },
   { id:"inventory", icon:"🧴", label:"المخزون" },
   { id:"whatsapp",  icon:"💬", label:"بوت واتساب" },
+  { id:"package",   icon:"📦", label:"باقتي" },
   { id:"settings",  icon:"⚙️",  label:"الإعدادات" },
 ]
 
@@ -1260,7 +1261,7 @@ function OwnerDashboard({ setScreen }) {
         </div>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:6 }}>
           <div style={{ fontSize:11, color:T.inkSoft }}>باقي 14 يوم على انتهاء التجربة</div>
-          <button onClick={() => toast("💳 صفحة الاشتراك قريباً!")}
+          <button onClick={() => toast("💳 تواصلي معنا على واتساب 0552401658 للاشتراك")}
             style={{ fontSize:11, fontWeight:700, color:T.white, background:T.roseDp, border:"none", padding:"4px 12px", borderRadius:20, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
             اشتركي الآن
           </button>
@@ -1286,6 +1287,7 @@ function OwnerDashboard({ setScreen }) {
         {tab === "inventory" && <OwnerInventory toast={toast} />}
         {tab === "whatsapp"  && <OwnerWhatsapp toast={toast} />}
         {tab === "settings"  && <OwnerSettings toast={toast} />}
+        {tab === "package"   && <OwnerPackage toast={toast} />}
       </div>
     </div>
   )
@@ -1445,7 +1447,7 @@ function OwnerInventory({ toast }) {
           <div style={{ fontSize:16, fontWeight:800, color:T.ink }}>إدارة المخزون</div>
           <div style={{ fontSize:11, color:T.inkSoft, marginTop:2 }}>خصم تلقائي عند تنفيذ الخدمة</div>
         </div>
-        <PBtn sm onClick={() => toast("✓ ستتوفر قريباً")}>+ إضافة</PBtn>
+        <PBtn sm onClick={() => setShowAddItem(true)}>+ إضافة</PBtn>
       </div>
       <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
         {ITEMS.map(item => (
@@ -1873,7 +1875,7 @@ function OwnerServices({ toast }) {
               <div style={{ fontSize:11, fontWeight:700, color:T.inkSoft, marginBottom:6 }}>
                 ⏰ الأوقات المتاحة ({sv.timeFrom} — {sv.timeTo})
               </div>
-              <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
+              <div style={{ display:"flex", flexWrap:"wrap", gap:4, direction:"ltr" }}>
                 {getAvailableTimes(sv.timeFrom, sv.timeTo).map(t => (
                   <span key={t} style={{ background:T.white, border:`1px solid ${T.roseL}`, color:T.roseDp, fontSize:10, fontWeight:600, padding:"2px 8px", borderRadius:20 }}>{t}</span>
                 ))}
@@ -1889,6 +1891,93 @@ function OwnerServices({ toast }) {
 /* ══════════════════════════════════════════
    ⚙️ OWNER SETTINGS
 ══════════════════════════════════════════ */
+
+function OwnerPackage({ toast }) {
+  const [currentPkg, setCurrentPkg] = useState("pro")
+  const [billing, setBilling] = useState("monthly")
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return
+      supabase.from('salons').select('package,billing').eq('email', session.user.email).then(({ data }) => {
+        if (data && data[0]) {
+          setCurrentPkg(data[0].package || "pro")
+          setBilling(data[0].billing || "monthly")
+        }
+      })
+    })
+  }, [])
+
+  const changePkg = async (newPkg) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    await supabase.from('salons').update({ package: newPkg }).eq('email', session.user.email)
+    setCurrentPkg(newPkg)
+    toast("✅ تم تغيير الباقة — سيتم التفعيل بعد الدفع")
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize:16, fontWeight:800, color:T.ink, marginBottom:6 }}>باقتي الحالية</div>
+      <div style={{ fontSize:12, color:T.inkSoft, marginBottom:20 }}>يمكنكِ تغيير الباقة في أي وقت</div>
+
+      {/* الباقة الحالية */}
+      <div style={{ background:`linear-gradient(135deg,${T.roseDp},#7A4830)`, borderRadius:16, padding:"16px", marginBottom:20, textAlign:"center" }}>
+        <div style={{ fontSize:12, color:"rgba(255,255,255,.7)", marginBottom:4 }}>باقتك الحالية</div>
+        <div style={{ fontSize:22, fontWeight:900, color:T.white }}>
+          {PKGS.find(p => p.id === currentPkg)?.name || "التوسع"}
+        </div>
+        <div style={{ fontSize:14, color:"rgba(255,255,255,.8)", marginTop:4 }}>
+          {PKGS.find(p => p.id === currentPkg)?.price?.toLocaleString()} ر.س/{billing === "yearly" ? "سنة" : "شهر"}
+        </div>
+      </div>
+
+      {/* خيار شهري/سنوي */}
+      <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+        {[
+          { id:"monthly", label:"شهري", sub:"ادفعي كل شهر" },
+          { id:"yearly",  label:"سنوي", sub:"شهر مجاني 🎁" },
+        ].map(b => (
+          <div key={b.id} onClick={() => setBilling(b.id)}
+            style={{ flex:1, padding:"12px", borderRadius:12, textAlign:"center", border:`2px solid ${billing===b.id ? T.roseDp : T.creamDk}`, background:billing===b.id ? T.roseL : T.white, cursor:"pointer" }}>
+            <div style={{ fontSize:14, fontWeight:800, color:billing===b.id ? T.roseDp : T.ink }}>{b.label}</div>
+            <div style={{ fontSize:11, color:T.inkSoft }}>{b.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* الباقات */}
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        {PKGS.map(p => (
+          <div key={p.id} onClick={() => changePkg(p.id)}
+            style={{ background:T.white, borderRadius:14, padding:"14px 16px", border:`2px solid ${currentPkg===p.id ? T.roseDp : p.featured ? T.gold : T.creamDk}`, cursor:"pointer", transition:"all .2s" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+              <div>
+                <div style={{ fontSize:14, fontWeight:800, color:T.ink }}>{p.name}</div>
+                <div style={{ fontSize:13, color:T.roseDp, fontWeight:700 }}>
+                  {billing === "yearly" ? (p.price * 11).toLocaleString() : p.price.toLocaleString()} ر.س/{billing === "yearly" ? "سنة" : "شهر"}
+                </div>
+              </div>
+              {currentPkg === p.id
+                ? <span style={{ background:T.roseL, color:T.roseDp, fontSize:11, fontWeight:700, padding:"4px 12px", borderRadius:20 }}>✓ باقتك الحالية</span>
+                : <span style={{ background:T.creamDk, color:T.inkSoft, fontSize:11, fontWeight:600, padding:"4px 12px", borderRadius:20 }}>اختاري</span>
+              }
+            </div>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+              {p.features.slice(0,3).map(f => <span key={f} style={{ fontSize:11, color:T.green }}>✓ {f}</span>)}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop:16, background:T.goldPale, borderRadius:12, padding:"12px 16px", fontSize:12, color:T.inkSoft, lineHeight:1.7, border:`1px solid ${T.goldL}` }}>
+        💡 لتغيير الباقة أو الدفع تواصلي معنا على واتساب:<br />
+        <strong style={{ color:T.ink }}>0552401658</strong>
+      </div>
+    </div>
+  )
+}
+
 function OwnerSettings({ toast }) {
   const [form, setForm] = useState({ salonName:"", ownerName:"", phone:"", email:"", city:"", bio:"", wa:"", insta:"" })
   const [photos, setPhotos] = useState([])
