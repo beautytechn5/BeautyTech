@@ -142,6 +142,16 @@ function TermsModal({ open, onClose }) {
 // الصالونات تُجلب من Supabase — فارغة حتى يسجل الصالونات
 const SALONS = []
 
+function useSalons() {
+  const [salons, setSalons] = useState([])
+  useEffect(() => {
+    supabase.from('salons').select('*').then(({ data }) => {
+      if (data) setSalons(data)
+    })
+  }, [])
+  return salons
+}
+
 // اقتراحات البحث الذكي
 const SUGGESTIONS = [
   { text:"صبغ شعر",      icon:"🎨", cat:"خدمات" },
@@ -242,6 +252,7 @@ function TypingText() {
 }
 
 function ClientHome({ setScreen, setSalon }) {
+  const salons = useSalons()
   const [q, setQ]           = useState("")
   const [fq, setFq]         = useState(false)
   const [showSugg, setShowSugg] = useState(false)
@@ -257,7 +268,7 @@ function ClientHome({ setScreen, setSalon }) {
     : SUGGESTIONS.slice(0, 6)
 
   // فلترة + ترتيب الصالونات
-  let list = SALONS.filter(s => {
+  let list = salons.filter(s => {
     if (availNow && !s.availNow) return false
     if (q && !s.name.includes(q) && !s.area.includes(q) && !s.tags.some(t => t.includes(q))) return false
     const minP = Math.min(...s.services.map(sv => sv.p))
