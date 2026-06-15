@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, createContext, useContext } from "react"
 import { supabase } from './supabase.js'
+
 const T = {
   rose:"#C8907A", roseDp:"#A8705A", roseL:"#F0D9D1", roseHov:"#96604A",
   gold:"#B8A060", goldL:"#E8D8A0", goldPale:"#F5EDD8", gold2:"#C8A870",
@@ -800,20 +801,10 @@ function OwnerRegister({ setScreen }) {
     setStep(2)
   }
 
-  const submit = async () => {
+  const submit = () => {
     if (!agreed) return toast("⚠ يرجى الموافقة على الشروط")
     setLoading(true)
-    const { error } = await supabase.from('salons').insert([{
-      name: form.name,
-      owner_name: form.owner,
-      phone: form.phone,
-      email: form.email,
-      city: form.city,
-      package: pkg,
-    }])
-    setLoading(false)
-    if (error) { toast("⚠ حدث خطأ، حاولي مرة أخرى"); return }
-    setStep(3)
+    setTimeout(() => { setLoading(false); setStep(3) }, 1500)
   }
 
   if (step === 3) return (
@@ -902,15 +893,23 @@ function OwnerRegister({ setScreen }) {
               </div>
             </Card>
 
-            {/* After trial — packages preview */}
+            {/* After trial — packages clickable */}
             <div style={{ background:T.cream, borderRadius:14, padding:"14px 16px", marginBottom:16, border:`1px solid ${T.creamDk}` }}>
               <div style={{ fontSize:12, fontWeight:700, color:T.inkSoft, marginBottom:10 }}>بعد انتهاء التجربة — اختاري باقتك</div>
               <div style={{ display:"flex", gap:8 }}>
                 {PKGS.map(p => (
-                  <div key={p.id} style={{ flex:1, background:T.white, borderRadius:10, padding:"10px 8px", textAlign:"center", border:`1px solid ${p.featured ? T.gold : T.creamDk}` }}>
-                    <div style={{ fontSize:11, fontWeight:800, color:p.featured ? T.gold : T.inkSoft, marginBottom:4 }}>{p.name}</div>
-                    <div style={{ fontSize:14, fontWeight:900, color:T.roseDp }}>{p.price.toLocaleString()}</div>
+                  <div key={p.id}
+                    onClick={() => setPkg(p.id)}
+                    style={{
+                      flex:1, background:pkg === p.id ? T.roseL : T.white,
+                      borderRadius:10, padding:"10px 8px", textAlign:"center",
+                      border:`2px solid ${pkg === p.id ? T.roseDp : p.featured ? T.gold : T.creamDk}`,
+                      cursor:"pointer", transition:"all .2s"
+                    }}>
+                    <div style={{ fontSize:11, fontWeight:800, color:pkg === p.id ? T.roseDp : p.featured ? T.gold : T.inkSoft, marginBottom:4 }}>{p.name}</div>
+                    <div style={{ fontSize:14, fontWeight:900, color:pkg === p.id ? T.roseDp : T.ink }}>{p.price.toLocaleString()}</div>
                     <div style={{ fontSize:10, color:T.inkSoft }}>ر.س/شهر</div>
+                    {pkg === p.id && <div style={{ fontSize:10, color:T.roseDp, marginTop:3, fontWeight:700 }}>✓ محدد</div>}
                   </div>
                 ))}
               </div>
