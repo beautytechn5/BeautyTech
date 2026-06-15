@@ -564,8 +564,19 @@ function BookingPage({ salon, setScreen }) {
 
   if (!salon) return null
 
-  const confirm = () => {
+  const confirm = async () => {
     if (!agreed) { toast("⚠ يرجى الموافقة على الشروط"); return }
+    const { error } = await supabase.from('bookings').insert([{
+      salon_id: salon.id || null,
+      client_name: name,
+      client_phone: phone,
+      appointment_date: date,
+      appointment_time: time,
+      total_amount: svc ? svc.p : 0,
+      deposit_amount: deposit,
+      status: 'pending',
+    }])
+    if (error) { toast("⚠ حدث خطأ: " + error.message); return }
     toast("✅ تم الحجز! سيصلكِ تأكيد على واتساب")
     setTimeout(() => setScreen("client-home"), 1500)
   }
@@ -700,12 +711,20 @@ function ClientRegister({ setScreen }) {
   const [termsOpen, setTermsOpen] = useState(false)
   const set = k => e => setForm(f => ({ ...f, [k]:e.target.value }))
 
-  const submit = () => {
+  const submit = async () => {
     if (!form.name || !form.phone || !form.email || !form.pass) return toast("⚠ يرجى تعبئة جميع الحقول")
     if (form.pass !== form.confirm) return toast("⚠ كلمة المرور غير متطابقة")
     if (!agreed) return toast("⚠ يرجى الموافقة على الشروط")
     setLoading(true)
-    setTimeout(() => { setLoading(false); toast("✅ تم إنشاء حسابك!"); setScreen("client-home") }, 1200)
+    const { error } = await supabase.from('clients').insert([{
+      full_name: form.name,
+      phone: form.phone,
+      email: form.email,
+    }])
+    setLoading(false)
+    if (error) { toast("⚠ حدث خطأ: " + error.message); return }
+    toast("✅ تم إنشاء حسابك!")
+    setScreen("client-home")
   }
 
   return (
@@ -801,10 +820,20 @@ function OwnerRegister({ setScreen }) {
     setStep(2)
   }
 
-  const submit = () => {
+  const submit = async () => {
     if (!agreed) return toast("⚠ يرجى الموافقة على الشروط")
     setLoading(true)
-    setTimeout(() => { setLoading(false); setStep(3) }, 1500)
+    const { error } = await supabase.from('salons').insert([{
+      name: form.name,
+      owner_name: form.owner,
+      phone: form.phone,
+      email: form.email,
+      city: form.city,
+      package: pkg,
+    }])
+    setLoading(false)
+    if (error) { toast("⚠ حدث خطأ: " + error.message); return }
+    setStep(3)
   }
 
   if (step === 3) return (
@@ -1379,10 +1408,20 @@ function OwnerServices({ toast }) {
     }))
   }
 
-  const addService = () => {
+  const addService = async () => {
     if (!newSvc.name || !newSvc.price) { toast("⚠ أدخلي اسم الخدمة والسعر"); return }
     if (newSvc.days.length === 0) { toast("⚠ اختاري يوم واحد على الأقل"); return }
-    setServices(s => [...s, { id:Date.now(), ...newSvc, price:Number(newSvc.price), active:true }])
+    const newItem = { id:Date.now(), ...newSvc, price:Number(newSvc.price), active:true }
+    setServices(s => [...s, newItem])
+    await supabase.from('services').insert([{
+      name: newSvc.name,
+      price: Number(newSvc.price),
+      duration: newSvc.duration,
+      days: newSvc.days,
+      time_from: newSvc.timeFrom,
+      time_to: newSvc.timeTo,
+      active: true,
+    }])
     setNewSvc({ name:"", price:"", duration:60, days:["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس"], timeFrom:"09:00", timeTo:"18:00" })
     setShowAdd(false)
     toast("✅ تمت إضافة الخدمة!")
