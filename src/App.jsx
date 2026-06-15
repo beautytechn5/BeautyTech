@@ -139,17 +139,30 @@ function TermsModal({ open, onClose }) {
 /* ══════════════════════════════════════════
    🏠 CLIENT HOME
 ══════════════════════════════════════════ */
-// الصالونات تُجلب من Supabase — فارغة حتى يسجل الصالونات
+// الصالونات تُجلب من Supabase
 const SALONS = []
 
 function useSalons() {
-  const [salons, setSalons] = useState([])
+  const [data, setData] = useState([])
   useEffect(() => {
-    supabase.from('salons').select('*').then(({ data }) => {
-      if (data) setSalons(data)
+    supabase.from('salons').select('*').then(({ data: rows }) => {
+      if (rows) setData(rows.map(s => ({
+        id: s.id,
+        name: s.name || "",
+        emoji: "💅",
+        city: s.city || "",
+        area: s.city || "",
+        pkg: s.package || "basic",
+        rating: 5.0,
+        reviews: 0,
+        tags: [],
+        services: [],
+        wa: (s.phone || "0500000000"),
+        availNow: true,
+      })))
     })
   }, [])
-  return salons
+  return data
 }
 
 // اقتراحات البحث الذكي
@@ -252,23 +265,7 @@ function TypingText() {
 }
 
 function ClientHome({ setScreen, setSalon }) {
-  const [salons, setSalons] = useState([])
-useEffect(() => {
-  supabase.from('salons').select('*').then(({ data }) => {
-    if (data) setSalons(data.map(s => ({
-      ...s,
-      emoji: "💅",
-      area: s.city || "",
-      pkg: s.package || "basic",
-      rating: 5.0,
-      reviews: 0,
-      tags: [],
-      services: [],
-      wa: s.phone || "0500000000",
-      availNow: true,
-    })))
-  })
-}, [])
+  const salons = useSalons()
   const [q, setQ]           = useState("")
   const [fq, setFq]         = useState(false)
   const [showSugg, setShowSugg] = useState(false)
@@ -287,7 +284,7 @@ useEffect(() => {
   let list = salons.filter(s => {
     if (availNow && !s.availNow) return false
     if (q && !s.name.includes(q) && !s.area.includes(q) && !(s.tags || []).some(t => t.includes(q))) return false
-    const minP = Math.min(...s.services.map(sv => sv.p))
+    const minP = s.services && s.services.length > 0 ? Math.min(...s.services.map(sv => sv.p)) : 0
     if (minP < priceRange[0] || minP > priceRange[1]) return false
     return true
   })
