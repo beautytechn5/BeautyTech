@@ -749,7 +749,7 @@ function ClientRegister({ setScreen }) {
     if (authError) { setLoading(false); toast("⚠ " + authError.message); return }
     await supabase.from('clients').insert([{ full_name: form.name, phone: form.phone, email: form.email }])
     setLoading(false)
-    toast("✅ تم إنشاء حسابك!")
+    toast("✅ مرحباً بكِ! تم إنشاء حسابك 🌸")
     setScreen("client-home")
   }
 
@@ -784,17 +784,31 @@ function ClientRegister({ setScreen }) {
 
 function ClientLogin({ setScreen }) {
   const toast = useToast()
-  const [form, setForm] = useState({ email:"", pass:"" })
+  const [form, setForm] = useState({ emailOrPhone:"", pass:"" })
   const [loading, setLoading] = useState(false)
   const set = k => e => setForm(f => ({ ...f, [k]:e.target.value }))
 
   const submit = async () => {
-    if (!form.email || !form.pass) return toast("⚠ أدخلي البريد وكلمة المرور")
+    if (!form.emailOrPhone || !form.pass) return toast("⚠ أدخلي البريد أو الجوال وكلمة المرور")
     setLoading(true)
-    const { error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.pass })
+    // تحديد هل الإدخال إيميل أو جوال
+    let email = form.emailOrPhone
+    if (!email.includes("@")) {
+      // جوال — ابحث عن الإيميل في جدول clients
+      const phone = email.replace(/\s/g, "")
+      const { data: clientData } = await supabase.from('clients').select('email').eq('phone', phone)
+      if (clientData && clientData.length > 0) {
+        email = clientData[0].email
+      } else {
+        setLoading(false)
+        toast("⚠ رقم الجوال غير مسجّل")
+        return
+      }
+    }
+    const { error } = await supabase.auth.signInWithPassword({ email, password: form.pass })
     setLoading(false)
-    if (error) { toast("⚠ البريد أو كلمة المرور غير صحيحة"); return }
-    toast("✅ مرحباً بكِ!")
+    if (error) { toast("⚠ البيانات غير صحيحة"); return }
+    toast("✅ مرحباً بكِ! 🌸")
     setScreen("client-home")
   }
 
@@ -809,7 +823,7 @@ function ClientLogin({ setScreen }) {
           <div style={{ fontSize:44, marginBottom:8 }}>💅</div>
           <p style={{ fontSize:14, color:T.inkSoft }}>أهلاً بعودتكِ 🌸</p>
         </div>
-        <Field label="البريد الإلكتروني" type="email" placeholder="example@email.com" value={form.email} onChange={set("email")} />
+        <Field label="البريد الإلكتروني أو رقم الجوال" placeholder="example@email.com أو 05xxxxxxxx" value={form.emailOrPhone} onChange={set("emailOrPhone")} />
         <Field label="كلمة المرور" type="password" placeholder="••••••••" value={form.pass} onChange={set("pass")} />
         <div style={{ textAlign:"left", marginBottom:18 }}>
           <span style={{ fontSize:13, color:T.roseDp, fontWeight:600, cursor:"pointer" }}>نسيتِ كلمة المرور؟</span>
@@ -2870,6 +2884,12 @@ function Navbar({ screen, setScreen }) {
               <button onClick={() => setScreen("owner-dashboard")}
                 style={{ padding:"7px 12px", borderRadius:50, border:`1.5px solid ${T.roseL}`, background:T.white, color:T.roseDp, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
                 🏪 لوحتي
+              </button>
+            )}
+            {role === "client" && (
+              <button onClick={() => setScreen("my-bookings")}
+                style={{ padding:"7px 12px", borderRadius:50, border:`1.5px solid ${T.roseL}`, background:T.white, color:T.roseDp, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                📅 حجوزاتي
               </button>
             )}
             <button onClick={logout}
