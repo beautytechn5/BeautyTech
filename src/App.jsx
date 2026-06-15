@@ -590,6 +590,7 @@ function BookingPage({ salon, setScreen }) {
 
   const confirm = async () => {
     if (!agreed) { toast("⚠ يرجى الموافقة على الشروط"); return }
+    const { data: { session } } = await supabase.auth.getSession()
     const { error } = await supabase.from('bookings').insert([{
       salon_id: salon.id || null,
       client_name: name,
@@ -599,6 +600,7 @@ function BookingPage({ salon, setScreen }) {
       total_amount: svc ? svc.p : 0,
       deposit_amount: deposit,
       status: 'pending',
+      user_id: session?.user?.id || null,
     }])
     if (error) { toast("⚠ حدث خطأ: " + error.message); return }
     toast("✅ تم الحجز! سيصلكِ تأكيد على واتساب")
@@ -2519,18 +2521,9 @@ function MyBookingsPage({ setScreen }) {
       if (!session) { setScreen("client-login"); return }
       const { data } = await supabase.from('bookings')
         .select('*, salons(name, city)')
-        .eq('client_phone', session.user.user_metadata?.phone || '')
+        .eq('user_id', session.user.id)
         .order('created_at', { ascending: false })
-      // fallback: search by email
-      if (!data || data.length === 0) {
-        const { data: d2 } = await supabase.from('bookings')
-          .select('*, salons(name, city)')
-          .order('created_at', { ascending: false })
-          .limit(50)
-        setBookings(d2 || [])
-      } else {
-        setBookings(data)
-      }
+      setBookings(data || [])
       setLoading(false)
     }
     load()
