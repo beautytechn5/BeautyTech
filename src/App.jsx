@@ -252,7 +252,23 @@ function TypingText() {
 }
 
 function ClientHome({ setScreen, setSalon }) {
-  const salons = useSalons()
+  const [salons, setSalons] = useState([])
+useEffect(() => {
+  supabase.from('salons').select('*').then(({ data }) => {
+    if (data) setSalons(data.map(s => ({
+      ...s,
+      emoji: "💅",
+      area: s.city || "",
+      pkg: s.package || "basic",
+      rating: 5.0,
+      reviews: 0,
+      tags: [],
+      services: [],
+      wa: s.phone || "0500000000",
+      availNow: true,
+    })))
+  })
+}, [])
   const [q, setQ]           = useState("")
   const [fq, setFq]         = useState(false)
   const [showSugg, setShowSugg] = useState(false)
