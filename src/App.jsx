@@ -835,38 +835,143 @@ function OwnerRegister({ setScreen }) {
   const [loading, setLoading] = useState(false)
   const [termsOpen, setTermsOpen] = useState(false)
   const [focusCity, setFocusCity] = useState(false)
+  const [salonId, setSalonId] = useState(null)
+  const [services, setServices] = useState([{ name:"", price:"" }])
+  const [savingServices, setSavingServices] = useState(false)
   const [form, setForm] = useState({ name:"", owner:"", phone:"", email:"", city:"", pass:"", confirm:"" })
   const set = k => e => setForm(f => ({ ...f, [k]:e.target.value }))
 
-  const next = () => {
+  const next = async () => {
     if (!form.name || !form.owner || !form.phone || !form.email || !form.pass) return toast("⚠ يرجى تعبئة الحقول الإلزامية")
     if (form.pass !== form.confirm) return toast("⚠ كلمة المرور غير متطابقة")
+    // تحقق من التجربة المجانية — هل سجّل من قبل؟
+    const { data: existing } = await supabase.from('salons').select('id').eq('email', form.email)
+    if (existing && existing.length > 0) {
+      toast("⚠ هذا الإيميل مسجّل مسبقاً — التجربة المجانية لمرة واحدة فقط")
+      return
+    }
+    const { data: existingPhone } = await supabase.from('salons').select('id').eq('phone', form.phone)
+    if (existingPhone && existingPhone.length > 0) {
+      toast("⚠ رقم الجوال مسجّل مسبقاً — التجربة المجانية لمرة واحدة فقط")
+      return
+    }
     setStep(2)
   }
 
   const submit = async () => {
     if (!agreed) return toast("⚠ يرجى الموافقة على الشروط")
     setLoading(true)
-    const { error } = await supabase.from('salons').insert([{
+    const trialEnd = new Date()
+    trialEnd.setDate(trialEnd.getDate() + 14)
+    const { data, error } = await supabase.from('salons').insert([{
       name: form.name,
       owner_name: form.owner,
       phone: form.phone,
       email: form.email,
       city: form.city,
       package: pkg,
-    }])
+      trial_end: trialEnd.toISOString(),
+    }]).select()
     setLoading(false)
     if (error) { toast("⚠ حدث خطأ: " + error.message); return }
+    if (data && data[0]) setSalonId(data[0].id)
     setStep(3)
   }
 
+  const addService = () => setServices(s => [...s, { name:"", price:"" }])
+  const removeService = (i) => setServices(s => s.filter((_, j) => j !== i))
+  const setServiceField = (i, k, v) => setServices(s => s.map((sv, j) => j === i ? { ...sv, [k]:v } : sv))
+
+  const finishServices = async () => {
+    const valid = services.filter(s => s.name && s.price)
+    if (valid.length > 0 && salonId) {
+      setSavingServices(true)
+      await supabase.from('services').insert(valid.map(s => ({
+        salon_id: salonId,
+        name: s.name,
+        price: Number(s.price),
+        active: true,
+        days: ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس"],
+        time_from: "09:00",
+        time_to: "18:00",
+      })))
+      setSavingServices(false)
+    }
+    setStep(4)
+  }
+
   if (step === 3) return (
+    <div style={{ background:T.cream, minHeight:"100vh", paddingBottom:40 }}>
+      <div style={{ background:T.white, borderBottom:`1px solid ${T.roseL}`, padding:"14px 20px", display:"flex", alignItems:"center", gap:12 }}>
+        <div style={{ fontSize:15, fontWeight:800, color:T.ink }}>أضيفي خدمات صالونك 💅</div>
+      </div>
+      <div style={{ padding:"20px 18px" }}>
+        <div style={{ background:T.greenL, borderRadius:14, padding:"12px 16px", marginBottom:20, display:"flex", gap:10, alignItems:"center" }}>
+          <div style={{ fontSize:22 }}>✅</div>
+          <div>
+            <div style={{ fontSize:13, fontWeight:700, color:T.green }}>تم تسجيل الصالون!</div>
+            <div style={{ fontSize:11, color:T.inkSoft }}>الآن أضيفي خدماتك لتظهر للعملاء</div>
+          </div>
+        </div>
+
+        <div style={{ fontSize:14, fontWeight:800, color:T.ink, marginBottom:16 }}>الخدمات المقدّمة</div>
+
+        <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:16 }}>
+          {services.map((sv, i) => (
+            <div key={i} style={{ background:T.white, borderRadius:14, padding:"14px", border:`1.5px solid ${T.creamDk}` }}>
+              <div style={{ display:"flex", gap:8, marginBottom:8 }}>
+                <div style={{ flex:2 }}>
+                  <label style={{ fontSize:11, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:4 }}>اسم الخدمة</label>
+                  <input value={sv.name} onChange={e => setServiceField(i, "name", e.target.value)}
+                    placeholder="مثال: قص شعر"
+                    style={{ width:"100%", padding:"10px 12px", border:`1.5px solid ${T.creamDk}`, borderRadius:10, fontSize:14, color:T.ink, background:T.cream, outline:"none", fontFamily:"Tajawal,sans-serif" }} />
+                </div>
+                <div style={{ flex:1 }}>
+                  <label style={{ fontSize:11, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:4 }}>السعر (ر.س)</label>
+                  <input type="number" value={sv.price} onChange={e => setServiceField(i, "price", e.target.value)}
+                    placeholder="150"
+                    style={{ width:"100%", padding:"10px 12px", border:`1.5px solid ${T.creamDk}`, borderRadius:10, fontSize:14, color:T.ink, background:T.cream, outline:"none", fontFamily:"Tajawal,sans-serif" }} />
+                </div>
+                {services.length > 1 && (
+                  <button onClick={() => removeService(i)}
+                    style={{ alignSelf:"flex-end", width:34, height:38, borderRadius:10, border:`1px solid ${T.redL}`, background:T.white, color:T.red, fontSize:16, cursor:"pointer", flexShrink:0 }}>✕</button>
+                )}
+              </div>
+              {sv.name && sv.price && (
+                <div style={{ fontSize:11, color:T.inkSoft }}>
+                  عربون 30%: <span style={{ color:T.gold, fontWeight:700 }}>{Math.round(Number(sv.price)*0.3)} ر.س</span>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <button onClick={addService}
+          style={{ width:"100%", padding:"11px", borderRadius:12, border:`2px dashed ${T.roseL}`, background:T.white, color:T.roseDp, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif", marginBottom:20 }}>
+          + إضافة خدمة أخرى
+        </button>
+
+        <PBtn full disabled={savingServices} onClick={finishServices}>
+          {savingServices ? "...جاري الحفظ" : "✓ حفظ الخدمات والإنهاء"}
+        </PBtn>
+        <div style={{ textAlign:"center", marginTop:12 }}>
+          <span onClick={() => setStep(4)} style={{ fontSize:13, color:T.inkSoft, cursor:"pointer" }}>تخطي لاحقاً ←</span>
+        </div>
+      </div>
+    </div>
+  )
+
+  if (step === 4) return (
     <div style={{ background:T.cream, minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
       <div style={{ textAlign:"center", maxWidth:340 }}>
         <div style={{ fontSize:60, marginBottom:14 }}>🎉</div>
-        <h2 style={{ fontSize:22, fontWeight:900, color:T.ink, marginBottom:10 }}>تم التسجيل بنجاح!</h2>
+        <h2 style={{ fontSize:22, fontWeight:900, color:T.ink, marginBottom:10 }}>صالونك جاهز!</h2>
+        <div style={{ background:T.greenL, borderRadius:14, padding:"12px 16px", marginBottom:16, textAlign:"right" }}>
+          <div style={{ fontSize:13, fontWeight:700, color:T.green, marginBottom:4 }}>🎁 تجربة مجانية 14 يوم مفعّلة</div>
+          <div style={{ fontSize:11, color:T.inkSoft }}>مرة واحدة فقط لكل صالون</div>
+        </div>
         <p style={{ fontSize:14, color:T.inkSoft, lineHeight:1.8, marginBottom:26 }}>
-          سيتواصل فريقنا معكِ خلال 24 ساعة لإتمام إعداد حسابك ودفع رسوم التأسيس (600 ر.س).
+          سيتواصل فريقنا معكِ خلال 24 ساعة لإتمام إعداد الحساب ودفع رسوم التأسيس (600 ر.س).
         </p>
         <PBtn full onClick={() => setScreen("owner-login")}>الذهاب لتسجيل الدخول</PBtn>
       </div>
@@ -883,7 +988,7 @@ function OwnerRegister({ setScreen }) {
           <div style={{ fontSize:11, color:T.inkSoft }}>رسوم التأسيس 600 ر.س مرة واحدة</div>
         </div>
         <div style={{ display:"flex", gap:4 }}>
-          {[1,2].map(s => <div key={s} style={{ width:26, height:4, borderRadius:4, background:step >= s ? T.roseDp : T.creamDk, transition:"background .3s" }} />)}
+          {[1,2,3].map(s => <div key={s} style={{ width:20, height:4, borderRadius:4, background:step >= s ? T.roseDp : T.creamDk, transition:"background .3s" }} />)}
         </div>
       </div>
 
