@@ -145,8 +145,12 @@ const SALONS = []
 function useSalons() {
   const [data, setData] = useState([])
   useEffect(() => {
-    supabase.from('salons').select('*').then(({ data: rows }) => {
-      if (rows) setData(rows.map(s => ({
+    const load = async () => {
+      const { data: rows } = await supabase.from('salons').select('*')
+      if (!rows) return
+      // جلب الخدمات لكل صالون
+      const { data: allServices } = await supabase.from('services').select('*').eq('active', true)
+      setData(rows.map(s => ({
         id: s.id,
         name: s.name || "",
         emoji: "💅",
@@ -155,12 +159,15 @@ function useSalons() {
         pkg: s.package || "basic",
         rating: 5.0,
         reviews: 0,
-        tags: [],
-        services: [],
+        tags: s.bio ? [s.bio.slice(0,10)] : [],
+        services: (allServices || [])
+          .filter(sv => sv.salon_id === s.id)
+          .map(sv => ({ n: sv.name, p: sv.price, dur: sv.duration })),
         wa: (s.phone || "0500000000"),
         availNow: true,
       })))
-    })
+    }
+    load()
   }, [])
   return data
 }
