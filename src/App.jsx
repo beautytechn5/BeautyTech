@@ -860,6 +860,8 @@ function OwnerRegister({ setScreen }) {
   const [salonId, setSalonId] = useState(null)
   const [services, setServices] = useState([{ name:"", price:"" }])
   const [savingServices, setSavingServices] = useState(false)
+  const [billing, setBilling] = useState("monthly")
+  const [skipTrial, setSkipTrial] = useState(false)
   const [form, setForm] = useState({ name:"", owner:"", phone:"", email:"", city:"", pass:"", confirm:"" })
   const set = k => e => setForm(f => ({ ...f, [k]:e.target.value }))
 
@@ -895,7 +897,9 @@ function OwnerRegister({ setScreen }) {
       email: form.email,
       city: form.city,
       package: pkg,
-      trial_end: trialEnd.toISOString(),
+      billing: billing,
+      skip_trial: skipTrial,
+      trial_end: skipTrial ? null : trialEnd.toISOString(),
     }]).select()
     setLoading(false)
     if (error) { toast("⚠ حدث خطأ: " + error.message); return }
@@ -1079,7 +1083,7 @@ function OwnerRegister({ setScreen }) {
             {/* After trial — packages clickable */}
             <div style={{ background:T.cream, borderRadius:14, padding:"14px 16px", marginBottom:16, border:`1px solid ${T.creamDk}` }}>
               <div style={{ fontSize:12, fontWeight:700, color:T.inkSoft, marginBottom:10 }}>بعد انتهاء التجربة — اختاري باقتك</div>
-              <div style={{ display:"flex", gap:8 }}>
+              <div style={{ display:"flex", gap:8, marginBottom:12 }}>
                 {PKGS.map(p => (
                   <div key={p.id}
                     onClick={() => setPkg(p.id)}
@@ -1096,9 +1100,41 @@ function OwnerRegister({ setScreen }) {
                   </div>
                 ))}
               </div>
-              <div style={{ fontSize:11, color:T.inkSoft, marginTop:10, textAlign:"center" }}>
+              {/* خيار شهري / سنوي */}
+              <div style={{ display:"flex", gap:8, marginBottom:10 }}>
+                {[
+                  { id:"monthly", label:"شهري", sub:"ادفعي كل شهر" },
+                  { id:"yearly",  label:"سنوي", sub:"شهر مجاني 🎁" },
+                ].map(b => (
+                  <div key={b.id}
+                    onClick={() => setBilling(b.id)}
+                    style={{ flex:1, padding:"10px 8px", borderRadius:10, textAlign:"center", border:`2px solid ${billing===b.id ? T.roseDp : T.creamDk}`, background:billing===b.id ? T.roseL : T.white, cursor:"pointer", transition:"all .2s" }}>
+                    <div style={{ fontSize:13, fontWeight:800, color:billing===b.id ? T.roseDp : T.ink }}>{b.label}</div>
+                    <div style={{ fontSize:10, color:T.inkSoft }}>{b.sub}</div>
+                    {b.id === "yearly" && billing === "yearly" && (
+                      <div style={{ fontSize:10, color:T.green, fontWeight:700, marginTop:2 }}>
+                        توفري {PKGS.find(p => p.id === pkg)?.price || 0} ر.س
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize:11, color:T.inkSoft, textAlign:"center" }}>
                 🎁 اشتراك سنوي = شهر مجاني (تدفع 11 شهراً)
               </div>
+            </div>
+
+            {/* خيار البدء بدون تجربة */}
+            <div style={{ background:T.goldPale, borderRadius:12, padding:"12px 16px", marginBottom:16, border:`1px solid ${T.goldL}`, display:"flex", alignItems:"center", gap:10 }}>
+              <div style={{ fontSize:20 }}>⚡</div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>تبين تبدأين الآن بدون تجربة؟</div>
+                <div style={{ fontSize:11, color:T.inkSoft }}>ادفعي رسوم التأسيس (600 ر.س) وابدأي فوراً</div>
+              </div>
+              <button onClick={() => setSkipTrial(true)}
+                style={{ padding:"7px 14px", borderRadius:20, border:"none", background:skipTrial ? T.gold : T.white, color:skipTrial ? T.white : T.gold, fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif", border:`1px solid ${T.gold}` }}>
+                {skipTrial ? "✓ محدد" : "اختاري"}
+              </button>
             </div>
 
             {/* Terms */}
@@ -1217,13 +1253,13 @@ function OwnerDashboard({ setScreen }) {
       <div style={{ background:"linear-gradient(135deg,#FFF8F5,#FFF3E8)", borderBottom:`1px solid ${T.roseL}`, padding:"10px 18px" }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
           <div style={{ fontSize:12, fontWeight:700, color:T.roseDp }}>🎁 تجربة مجانية — 14 يوم</div>
-          <div style={{ fontSize:11, color:T.inkSoft }}>انتهت 3 أيام من 14</div>
+          <div style={{ fontSize:11, color:T.inkSoft }}>اليوم الأول من التجربة</div>
         </div>
         <div style={{ background:T.roseL, borderRadius:50, height:6, overflow:"hidden" }}>
-          <div style={{ width:"21%", height:"100%", borderRadius:50, background:`linear-gradient(90deg,${T.rose},${T.roseDp})`, transition:"width .3s" }} />
+          <div style={{ width:"2%", height:"100%", borderRadius:50, background:`linear-gradient(90deg,${T.rose},${T.roseDp})`, transition:"width .3s" }} />
         </div>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:6 }}>
-          <div style={{ fontSize:11, color:T.inkSoft }}>باقي 11 يوم على انتهاء التجربة</div>
+          <div style={{ fontSize:11, color:T.inkSoft }}>باقي 14 يوم على انتهاء التجربة</div>
           <button onClick={() => toast("💳 صفحة الاشتراك قريباً!")}
             style={{ fontSize:11, fontWeight:700, color:T.white, background:T.roseDp, border:"none", padding:"4px 12px", borderRadius:20, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
             اشتركي الآن
@@ -1490,7 +1526,7 @@ function OwnerWhatsapp({ toast }) {
     <div>
       <div style={{ marginBottom:18 }}>
         <div style={{ fontSize:16, fontWeight:800, color:T.ink }}>بوت واتساب الذكي</div>
-        <div style={{ fontSize:11, color:T.inkSoft, marginTop:3 }}>كل صالون له بوت مستقل برقمه الخاص — مش رقم المنصة</div>
+        <div style={{ fontSize:11, color:T.inkSoft, marginTop:3 }}>كل صالون له بوت مستقل برقمه الخاص — ليس رقم المنصة</div>
       </div>
 
       {/* Setup */}
@@ -1607,7 +1643,7 @@ function OwnerWhatsapp({ toast }) {
         <div style={{ fontSize:13, fontWeight:800, color:T.ink, marginBottom:12 }}>⚙️ كيف يعمل البوت؟</div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
           {[
-            { icon:"📱", t:"رقمك أنتِ",   d:"البوت يُرسل من رقم صالونك — مش رقم المنصة" },
+            { icon:"📱", t:"رقمك أنتِ",   d:"البوت يُرسل من رقم صالونك — ليس رقم المنصة" },
             { icon:"🔗", t:"ربط تلقائي",  d:"كل حجز جديد يُطلق رسالة تأكيد فورية" },
             { icon:"⏱️", t:"توقيت ذكي",   d:"التذكيرات تُرسل تلقائياً بدون تدخل منكِ" },
             { icon:"✏️", t:"نصوص مخصصة", d:"كل رسالة قابلة للتعديل بأسلوبك" },
