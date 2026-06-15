@@ -162,7 +162,7 @@ function useSalons() {
         tags: s.bio ? [s.bio.slice(0,10)] : [],
         services: (allServices || [])
           .filter(sv => sv.salon_id === s.id)
-          .map(sv => ({ n: sv.name, p: sv.price, dur: sv.duration })),
+          .map(sv => ({ n: sv.name, p: sv.price, dur: sv.duration, timeFrom: sv.time_from, timeTo: sv.time_to, days: sv.days })),
         wa: (s.phone || "0500000000"),
         availNow: true,
       })))
@@ -591,7 +591,15 @@ function BookingPage({ salon, setScreen }) {
   const [agreed, setAgreed] = useState(false)
   const [termsOpen, setTermsOpen] = useState(false)
   const deposit = svc ? Math.round(svc.p * 0.3) : 0
-  const TIMES = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30"]
+  const ALL_SVC_TIMES = ["08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"]
+  const getSvcTimes = () => {
+    if (!svc || !svc.timeFrom || !svc.timeTo) return ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30"]
+    const fi = ALL_SVC_TIMES.indexOf(svc.timeFrom)
+    const ti = ALL_SVC_TIMES.indexOf(svc.timeTo)
+    if (fi < 0 || ti < 0) return ALL_SVC_TIMES
+    return ALL_SVC_TIMES.slice(fi, ti + 1)
+  }
+  const TIMES = getSvcTimes()
 
   if (!salon) return null
 
@@ -1884,7 +1892,7 @@ function OwnerServices({ toast }) {
               </div>
               <div style={{ display:"flex", flexWrap:"wrap", gap:4, direction:"ltr" }}>
                 {getAvailableTimes(sv.timeFrom, sv.timeTo).map(t => (
-                  <span key={t} style={{ background:T.white, border:`1px solid ${T.roseL}`, color:T.roseDp, fontSize:10, fontWeight:600, padding:"2px 8px", borderRadius:20 }}>{t}</span>
+                  <span key={t} style={{ background:T.white, border:`1px solid ${T.roseL}`, color:T.roseDp, fontSize:10, fontWeight:600, padding:"4px 10px", borderRadius:20, cursor:"default" }}>{t}</span>
                 ))}
               </div>
             </div>
