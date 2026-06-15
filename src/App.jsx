@@ -2281,6 +2281,34 @@ function AdminDashboard({ setScreen }) {
   const [adminPass, setAdminPass] = useState("")
   const [auth, setAuth] = useState(false)
   const [focusPass, setFocusPass] = useState(false)
+  const [stats, setStats] = useState({ salons:0, clients:0, bookings:0 })
+  const [salonsList, setSalonsList] = useState([])
+  const [pkgStats, setPkgStats] = useState({ basic:0, pro:0, elite:0 })
+
+  useEffect(() => {
+    if (!auth) return
+    // جلب الإحصائيات
+    supabase.from('salons').select('*').then(({ data }) => {
+      if (data) {
+        setStats(s => ({ ...s, salons: data.length }))
+        setSalonsList(data)
+        setPkgStats({
+          basic:  data.filter(s => s.package === 'basic').length,
+          pro:    data.filter(s => s.package === 'pro').length,
+          elite:  data.filter(s => s.package === 'elite').length,
+        })
+      }
+    })
+    supabase.from('clients').select('id', { count:'exact' }).then(({ count }) => {
+      if (count !== null) setStats(s => ({ ...s, clients: count }))
+    })
+    supabase.from('bookings').select('id,deposit_amount', { count:'exact' }).then(({ data, count }) => {
+      if (count !== null) setStats(s => ({ ...s, bookings: count }))
+    })
+  }, [auth])
+
+  const PKG_PRICES = { basic:200, pro:800, elite:1500 }
+  const monthlyRevenue = (pkgStats.basic * PKG_PRICES.basic) + (pkgStats.pro * PKG_PRICES.pro) + (pkgStats.elite * PKG_PRICES.elite)
 
   if (!auth) return (
     <div style={{ background:T.cream, minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
@@ -2340,42 +2368,119 @@ function AdminDashboard({ setScreen }) {
         ))}
       </div>
       <div style={{ padding:"18px 16px" }}>
+
         {tab === "stats" && (
           <div>
+            {/* أرقام رئيسية */}
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
-              {[
-                { l:"صالونات مشتركة",    v:"0", gold:true },
-                { l:"حجوزات الشهر",      v:"0" },
-                { l:"إيرادات الاشتراكات",v:"0 ر.س" },
-                { l:"متوسط رضا العملاء", v:"—" },
-              ].map(s => (
-                <Card key={s.l} style={{ padding:14, background:s.gold ? `linear-gradient(135deg,${T.gold},${T.gold2})` : T.white, textAlign:"center" }}>
-                  <div style={{ fontSize:26, fontWeight:900, color:s.gold ? T.white : T.roseDp }}>{s.v}</div>
-                  <div style={{ fontSize:11, color:s.gold ? "rgba(255,255,255,.8)" : T.inkSoft, fontWeight:600, marginTop:5 }}>{s.l}</div>
-                </Card>
-              ))}
+              <Card style={{ padding:16, background:`linear-gradient(135deg,${T.gold},${T.gold2})`, textAlign:"center" }}>
+                <div style={{ fontSize:32, fontWeight:900, color:T.white }}>{stats.salons}</div>
+                <div style={{ fontSize:11, color:"rgba(255,255,255,.8)", fontWeight:600, marginTop:5 }}>🏪 صالون مسجّل</div>
+              </Card>
+              <Card style={{ padding:16, textAlign:"center" }}>
+                <div style={{ fontSize:32, fontWeight:900, color:T.roseDp }}>{stats.clients}</div>
+                <div style={{ fontSize:11, color:T.inkSoft, fontWeight:600, marginTop:5 }}>👤 عميلة مسجّلة</div>
+              </Card>
+              <Card style={{ padding:16, textAlign:"center" }}>
+                <div style={{ fontSize:32, fontWeight:900, color:T.roseDp }}>{stats.bookings}</div>
+                <div style={{ fontSize:11, color:T.inkSoft, fontWeight:600, marginTop:5 }}>📅 حجز إجمالي</div>
+              </Card>
+              <Card style={{ padding:16, background:`linear-gradient(135deg,${T.roseDp},#7A4830)`, textAlign:"center" }}>
+                <div style={{ fontSize:24, fontWeight:900, color:T.white }}>{monthlyRevenue.toLocaleString()}</div>
+                <div style={{ fontSize:10, color:"rgba(255,255,255,.8)", fontWeight:600, marginTop:5 }}>💰 إيرادات الاشتراكات/شهر</div>
+              </Card>
             </div>
+
+            {/* توزيع الباقات */}
+            <Card style={{ padding:16, marginBottom:14 }}>
+              <div style={{ fontSize:14, fontWeight:800, color:T.ink, marginBottom:14 }}>توزيع الباقات</div>
+              {[
+                { name:"الأساسية", count:pkgStats.basic, price:200, color:T.inkSoft },
+                { name:"التوسع",   count:pkgStats.pro,   price:800, color:T.gold },
+                { name:"النخبة",   count:pkgStats.elite, price:1500, color:T.roseDp },
+              ].map(p => (
+                <div key={p.name} style={{ marginBottom:12 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:5 }}>
+                    <div>
+                      <span style={{ fontSize:13, fontWeight:700, color:T.ink }}>{p.name}</span>
+                      <span style={{ fontSize:11, color:T.inkSoft, marginRight:8 }}> — {p.price} ر.س/شهر</span>
+                    </div>
+                    <span style={{ fontSize:13, fontWeight:800, color:p.color }}>{p.count} صالون</span>
+                  </div>
+                  <div style={{ background:T.creamDk, borderRadius:50, height:6, overflow:"hidden" }}>
+                    <div style={{ width: stats.salons > 0 ? `${(p.count/stats.salons)*100}%` : "0%", height:"100%", background:p.color, borderRadius:50, transition:"width .5s" }} />
+                  </div>
+                  <div style={{ fontSize:11, color:T.inkSoft, marginTop:3, textAlign:"left" }}>
+                    إيراد: {(p.count * p.price).toLocaleString()} ر.س/شهر
+                  </div>
+                </div>
+              ))}
+              <div style={{ borderTop:`1px solid ${T.creamDk}`, paddingTop:12, marginTop:4 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:13 }}>
+                  <span style={{ fontWeight:700, color:T.ink }}>إجمالي الاشتراكات</span>
+                  <span style={{ fontWeight:900, color:T.roseDp }}>{monthlyRevenue.toLocaleString()} ر.س/شهر</span>
+                </div>
+              </div>
+            </Card>
+
+            {/* رسوم التأسيس */}
             <div style={{ background:T.goldPale, border:`1px solid ${T.goldL}`, borderRadius:14, padding:"14px 16px" }}>
-              <div style={{ fontSize:13, fontWeight:700, color:T.ink, marginBottom:4 }}>💡 رسوم التأسيس</div>
-              <div style={{ fontSize:12, color:T.inkSoft, lineHeight:1.7 }}>600 ريال — تُدفع مرة واحدة. الاشتراك السنوي يوفر شهراً مجانياً (11 شهراً فقط).</div>
+              <div style={{ fontSize:13, fontWeight:700, color:T.ink, marginBottom:4 }}>💡 رسوم التأسيس المتوقعة</div>
+              <div style={{ fontSize:20, fontWeight:900, color:T.gold }}>{(stats.salons * 600).toLocaleString()} ر.س</div>
+              <div style={{ fontSize:12, color:T.inkSoft, marginTop:4 }}>{stats.salons} صالون × 600 ر.س</div>
             </div>
           </div>
         )}
+
         {tab === "salons" && (
-          <Card style={{ padding:16 }}>
-            <div style={{ fontSize:14, fontWeight:800, color:T.ink, marginBottom:4 }}>الصالونات المشتركة</div>
-            <Empty icon="🏪" title="لا توجد صالونات بعد" desc="ستظهر هنا فور تسجيل الصالونات" />
-          </Card>
+          <div>
+            <div style={{ fontSize:15, fontWeight:800, color:T.ink, marginBottom:14 }}>
+              الصالونات المسجّلة ({salonsList.length})
+            </div>
+            {salonsList.length === 0
+              ? <Empty icon="🏪" title="لا توجد صالونات بعد" desc="ستظهر هنا فور تسجيل الصالونات" />
+              : <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                  {salonsList.map(s => (
+                    <Card key={s.id} style={{ padding:16 }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                        <div>
+                          <div style={{ fontSize:14, fontWeight:800, color:T.ink }}>{s.name}</div>
+                          <div style={{ fontSize:12, color:T.inkSoft, marginTop:3 }}>{s.owner_name} — {s.phone}</div>
+                          <div style={{ fontSize:12, color:T.inkSoft }}>{s.email}</div>
+                          <div style={{ fontSize:12, color:T.inkSoft }}>📍 {s.city}</div>
+                        </div>
+                        <div style={{ textAlign:"left" }}>
+                          <span style={{ background:s.package==="elite"?T.roseL:s.package==="pro"?T.goldPale:T.creamDk, color:s.package==="elite"?T.roseDp:s.package==="pro"?T.gold:T.inkSoft, fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20, display:"block", marginBottom:4 }}>
+                            {s.package === "elite" ? "✦ نخبة" : s.package === "pro" ? "⚡ توسع" : "📦 أساسية"}
+                          </span>
+                          <div style={{ fontSize:10, color:T.inkSoft }}>
+                            {new Date(s.created_at).toLocaleDateString("ar-SA")}
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+            }
+          </div>
         )}
+
         {tab === "packages" && (
           <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
             {PKGS.map(p => (
               <Card key={p.id} style={{ padding:16, border:`2px solid ${p.featured ? T.gold : T.creamDk}`, position:"relative" }}>
                 {p.featured && <div style={{ position:"absolute", top:-10, right:16, background:T.gold, color:T.white, fontSize:10, fontWeight:700, padding:"3px 12px", borderRadius:20 }}>الأكثر طلباً ✦</div>}
-                <div style={{ fontSize:14, fontWeight:800, color:T.ink, marginBottom:4 }}>{p.name}</div>
-                <div style={{ fontSize:20, fontWeight:900, color:T.roseDp, marginBottom:10 }}>
-                  {p.price.toLocaleString()}
-                  <span style={{ fontSize:12, color:T.inkSoft, fontWeight:400 }}> ر.س/شهر</span>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+                  <div>
+                    <div style={{ fontSize:14, fontWeight:800, color:T.ink }}>{p.name}</div>
+                    <div style={{ fontSize:20, fontWeight:900, color:T.roseDp }}>{p.price.toLocaleString()} <span style={{ fontSize:12, color:T.inkSoft, fontWeight:400 }}>ر.س/شهر</span></div>
+                  </div>
+                  <div style={{ textAlign:"left" }}>
+                    <div style={{ fontSize:24, fontWeight:900, color:T.gold }}>
+                      {p.id === "basic" ? pkgStats.basic : p.id === "pro" ? pkgStats.pro : pkgStats.elite}
+                    </div>
+                    <div style={{ fontSize:10, color:T.inkSoft }}>صالون</div>
+                  </div>
                 </div>
                 <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
                   {p.features.map(f => <span key={f} style={{ fontSize:11, color:T.green }}>{"✓ " + f}</span>)}
