@@ -1982,7 +1982,48 @@ function OwnerSettings({ toast }) {
   const [form, setForm] = useState({ salonName:"", ownerName:"", phone:"", email:"", city:"", bio:"", wa:"", insta:"" })
   const [photos, setPhotos] = useState([])
   const [focusF, setFocusF] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [salonId, setSalonId] = useState(null)
   const set = k => e => setForm(f => ({ ...f, [k]:e.target.value }))
+
+  // جلب بيانات الصالون عند الفتح
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return
+      supabase.from('salons').select('*').eq('email', session.user.email).then(({ data }) => {
+        if (data && data[0]) {
+          const s = data[0]
+          setSalonId(s.id)
+          setForm({
+            salonName: s.name || "",
+            ownerName: s.owner_name || "",
+            phone: s.phone || "",
+            email: s.email || "",
+            city: s.city || "",
+            bio: s.bio || "",
+            wa: s.phone || "",
+            insta: s.insta || "",
+          })
+        }
+      })
+    })
+  }, [])
+
+  const saveSettings = async () => {
+    if (!salonId) { toast("⚠ لم يتم العثور على الصالون"); return }
+    setSaving(true)
+    const { error } = await supabase.from('salons').update({
+      name: form.salonName,
+      owner_name: form.ownerName,
+      phone: form.phone,
+      city: form.city,
+      bio: form.bio,
+      insta: form.insta,
+    }).eq('id', salonId)
+    setSaving(false)
+    if (error) { toast("⚠ حدث خطأ: " + error.message); return }
+    toast("✅ تم حفظ إعدادات الصالون!")
+  }
 
   const inp = (k) => ({
     width:"100%", padding:"12px 14px",
@@ -2057,7 +2098,7 @@ function OwnerSettings({ toast }) {
         </div>
       </Card>
 
-      <PBtn full onClick={() => toast("✅ تم حفظ إعدادات الصالون!")}>✓ حفظ التغييرات</PBtn>
+      <PBtn full disabled={saving} onClick={saveSettings}>{saving ? "...جاري الحفظ" : "✓ حفظ التغييرات"}</PBtn>
     </div>
   )
 }
