@@ -270,7 +270,7 @@ function ClientHome({ setScreen, setSalon }) {
   // فلترة + ترتيب الصالونات
   let list = salons.filter(s => {
     if (availNow && !s.availNow) return false
-    if (q && !s.name.includes(q) && !s.area.includes(q) && !s.tags.some(t => t.includes(q))) return false
+    if (q && !s.name.includes(q) && !s.area.includes(q) && !(s.tags || []).some(t => t.includes(q))) return false
     const minP = Math.min(...s.services.map(sv => sv.p))
     if (minP < priceRange[0] || minP > priceRange[1]) return false
     return true
