@@ -800,10 +800,20 @@ function OwnerRegister({ setScreen }) {
     setStep(2)
   }
 
-  const submit = () => {
+  const submit = async () => {
     if (!agreed) return toast("⚠ يرجى الموافقة على الشروط")
     setLoading(true)
-    setTimeout(() => { setLoading(false); setStep(3) }, 1500)
+    const { error } = await supabase.from('salons').insert([{
+      name: form.name,
+      owner_name: form.owner,
+      phone: form.phone,
+      email: form.email,
+      city: form.city,
+      package: pkg,
+    }])
+    setLoading(false)
+    if (error) { toast("⚠ حدث خطأ، حاولي مرة أخرى"); return }
+    setStep(3)
   }
 
   if (step === 3) return (
