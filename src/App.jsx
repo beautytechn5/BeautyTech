@@ -739,14 +739,16 @@ function ClientRegister({ setScreen }) {
     if (!form.name || !form.phone || !form.email || !form.pass) return toast("⚠ يرجى تعبئة جميع الحقول")
     if (form.pass !== form.confirm) return toast("⚠ كلمة المرور غير متطابقة")
     if (!agreed) return toast("⚠ يرجى الموافقة على الشروط")
+    if (form.pass.length < 6) return toast("⚠ كلمة المرور 6 أحرف على الأقل")
     setLoading(true)
-    const { error } = await supabase.from('clients').insert([{
-      full_name: form.name,
-      phone: form.phone,
+    const { error: authError } = await supabase.auth.signUp({
       email: form.email,
-    }])
+      password: form.pass,
+      options: { data: { role: "client", name: form.name } }
+    })
+    if (authError) { setLoading(false); toast("⚠ " + authError.message); return }
+    await supabase.from('clients').insert([{ full_name: form.name, phone: form.phone, email: form.email }])
     setLoading(false)
-    if (error) { toast("⚠ حدث خطأ: " + error.message); return }
     toast("✅ تم إنشاء حسابك!")
     setScreen("client-home")
   }
@@ -786,10 +788,14 @@ function ClientLogin({ setScreen }) {
   const [loading, setLoading] = useState(false)
   const set = k => e => setForm(f => ({ ...f, [k]:e.target.value }))
 
-  const submit = () => {
+  const submit = async () => {
     if (!form.email || !form.pass) return toast("⚠ أدخلي البريد وكلمة المرور")
     setLoading(true)
-    setTimeout(() => { setLoading(false); toast("✅ مرحباً بكِ!"); setScreen("client-home") }, 1000)
+    const { error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.pass })
+    setLoading(false)
+    if (error) { toast("⚠ البريد أو كلمة المرور غير صحيحة"); return }
+    toast("✅ مرحباً بكِ!")
+    setScreen("client-home")
   }
 
   return (
@@ -844,23 +850,26 @@ function OwnerRegister({ setScreen }) {
   const next = async () => {
     if (!form.name || !form.owner || !form.phone || !form.email || !form.pass) return toast("⚠ يرجى تعبئة الحقول الإلزامية")
     if (form.pass !== form.confirm) return toast("⚠ كلمة المرور غير متطابقة")
-    // تحقق من التجربة المجانية — هل سجّل من قبل؟
+    if (form.pass.length < 6) return toast("⚠ كلمة المرور 6 أحرف على الأقل")
+    // تحقق من التجربة المجانية
     const { data: existing } = await supabase.from('salons').select('id').eq('email', form.email)
-    if (existing && existing.length > 0) {
-      toast("⚠ هذا الإيميل مسجّل مسبقاً — التجربة المجانية لمرة واحدة فقط")
-      return
-    }
+    if (existing && existing.length > 0) { toast("⚠ هذا الإيميل مسجّل مسبقاً — التجربة المجانية لمرة واحدة فقط"); return }
     const { data: existingPhone } = await supabase.from('salons').select('id').eq('phone', form.phone)
-    if (existingPhone && existingPhone.length > 0) {
-      toast("⚠ رقم الجوال مسجّل مسبقاً — التجربة المجانية لمرة واحدة فقط")
-      return
-    }
+    if (existingPhone && existingPhone.length > 0) { toast("⚠ رقم الجوال مسجّل مسبقاً — التجربة المجانية لمرة واحدة فقط"); return }
     setStep(2)
   }
 
   const submit = async () => {
     if (!agreed) return toast("⚠ يرجى الموافقة على الشروط")
     setLoading(true)
+    // إنشاء حساب Auth
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: form.email,
+      password: form.pass,
+      options: { data: { role: "owner", name: form.owner } }
+    })
+    if (authError) { setLoading(false); toast("⚠ " + authError.message); return }
+    // حفظ بيانات الصالون
     const trialEnd = new Date()
     trialEnd.setDate(trialEnd.getDate() + 14)
     const { data, error } = await supabase.from('salons').insert([{
@@ -1118,10 +1127,14 @@ function OwnerLogin({ setScreen }) {
   const [loading, setLoading] = useState(false)
   const set = k => e => setForm(f => ({ ...f, [k]:e.target.value }))
 
-  const submit = () => {
+  const submit = async () => {
     if (!form.email || !form.pass) return toast("⚠ أدخلي بيانات الدخول")
     setLoading(true)
-    setTimeout(() => { setLoading(false); toast("✅ أهلاً بكِ!"); setScreen("owner-dashboard") }, 1000)
+    const { error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.pass })
+    setLoading(false)
+    if (error) { toast("⚠ البريد أو كلمة المرور غير صحيحة"); return }
+    toast("✅ أهلاً بكِ!")
+    setScreen("owner-dashboard")
   }
 
   return (
@@ -1216,11 +1229,110 @@ function OwnerDashboard({ setScreen }) {
       {/* Content */}
       <div style={{ padding:"18px 16px" }}>
         {tab === "overview"  && <OwnerOverview />}
-        {tab === "bookings"  && <Empty icon="📅" title="لا توجد حجوزات" desc="ستظهر هنا فور بدء العمل" />}
+        {tab === "bookings"  && <OwnerBookings />}
         {tab === "services"  && <OwnerServices toast={toast} />}
         {tab === "inventory" && <OwnerInventory toast={toast} />}
         {tab === "whatsapp"  && <OwnerWhatsapp toast={toast} />}
         {tab === "settings"  && <OwnerSettings toast={toast} />}
+      </div>
+    </div>
+  )
+}
+
+
+function OwnerBookings() {
+  const [bookings, setBookings] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState("active")
+  const toast = useToast()
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      // جلب بيانات الصالون أولاً
+      const { data: salonData } = await supabase.from('salons').select('id').eq('email', session.user.email)
+      if (!salonData || salonData.length === 0) { setLoading(false); return }
+      const salonId = salonData[0].id
+      const { data } = await supabase.from('bookings')
+        .select('*')
+        .eq('salon_id', salonId)
+        .order('appointment_date', { ascending: true })
+      setBookings(data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const updateStatus = async (id, status) => {
+    await supabase.from('bookings').update({ status }).eq('id', id)
+    setBookings(b => b.map(bk => bk.id === id ? { ...bk, status } : bk))
+    toast(status === "completed" ? "✅ تم تحديد الحجز كمكتمل" : "تم إلغاء الحجز")
+  }
+
+  const filtered = bookings.filter(b => {
+    if (tab === "active")    return b.status === "pending" || b.status === "confirmed"
+    if (tab === "done")      return b.status === "completed"
+    if (tab === "cancelled") return b.status === "cancelled"
+    return true
+  })
+
+  const STATUS = {
+    pending:   { label:"قيد الانتظار", color:T.gold,    bg:T.goldPale },
+    confirmed: { label:"مؤكد",         color:T.green,   bg:T.greenL },
+    completed: { label:"مكتمل",        color:T.inkSoft, bg:T.creamDk },
+    cancelled: { label:"ملغي",         color:T.red,     bg:T.redL },
+  }
+
+  return (
+    <div>
+      <div style={{ display:"flex", background:T.white, borderRadius:12, overflow:"hidden", marginBottom:14, border:`1px solid ${T.creamDk}` }}>
+        {[
+          { id:"active",    label:"الفعّالة",  icon:"🟢", count: bookings.filter(b => b.status==="pending"||b.status==="confirmed").length },
+          { id:"done",      label:"المكتملة",  icon:"✅", count: bookings.filter(b => b.status==="completed").length },
+          { id:"cancelled", label:"الملغية",   icon:"❌", count: bookings.filter(b => b.status==="cancelled").length },
+        ].map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            style={{ flex:1, padding:"10px 8px", border:"none", borderBottom:`3px solid ${tab===t.id ? T.roseDp : "transparent"}`, background:"transparent", cursor:"pointer", fontSize:11, fontWeight:tab===t.id ? 700 : 400, color:tab===t.id ? T.roseDp : T.inkSoft, fontFamily:"Tajawal,sans-serif" }}>
+            {t.icon} {t.label} {t.count > 0 && <span style={{ background:tab===t.id?T.roseDp:T.creamDk, color:tab===t.id?T.white:T.inkSoft, borderRadius:"50%", padding:"1px 6px", fontSize:10, marginRight:3 }}>{t.count}</span>}
+          </button>
+        ))}
+      </div>
+
+      {loading && <div style={{ textAlign:"center", padding:40, color:T.inkSoft }}>...جاري التحميل</div>}
+      {!loading && filtered.length === 0 && <Empty icon="📅" title="لا توجد حجوزات" desc="ستظهر هنا فور بدء الاستقبال" />}
+
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        {filtered.map(bk => {
+          const st = STATUS[bk.status] || STATUS.pending
+          return (
+            <Card key={bk.id} style={{ padding:14 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                <div style={{ fontSize:14, fontWeight:800, color:T.ink }}>{bk.client_name}</div>
+                <span style={{ background:st.bg, color:st.color, fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20 }}>{st.label}</span>
+              </div>
+              <div style={{ fontSize:12, color:T.inkSoft, marginBottom:8 }}>
+                📞 {bk.client_phone} · 📅 {bk.appointment_date} · ⏰ {bk.appointment_time}
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, marginBottom:10 }}>
+                <span style={{ color:T.inkSoft }}>المبلغ: <span style={{ color:T.ink, fontWeight:700 }}>{bk.total_amount} ر.س</span></span>
+                <span style={{ color:T.inkSoft }}>العربون: <span style={{ color:T.gold, fontWeight:700 }}>{bk.deposit_amount} ر.س</span></span>
+              </div>
+              {(bk.status === "pending" || bk.status === "confirmed") && (
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={() => updateStatus(bk.id, "completed")}
+                    style={{ flex:1, padding:"8px", borderRadius:10, border:"none", background:T.greenL, color:T.green, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    ✅ مكتمل
+                  </button>
+                  <button onClick={() => updateStatus(bk.id, "cancelled")}
+                    style={{ flex:1, padding:"8px", borderRadius:10, border:`1px solid ${T.redL}`, background:T.white, color:T.red, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    ❌ إلغاء
+                  </button>
+                </div>
+              )}
+            </Card>
+          )
+        })}
       </div>
     </div>
   )
@@ -2377,6 +2489,130 @@ function GiftPage({ setScreen }) {
   )
 }
 
+
+/* ══════════════════════════════════════════
+   📅 MY BOOKINGS PAGE — للعميلة
+══════════════════════════════════════════ */
+function MyBookingsPage({ setScreen }) {
+  const [bookings, setBookings] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState("active") // active | done | cancelled
+  const toast = useToast()
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { setScreen("client-login"); return }
+      const { data } = await supabase.from('bookings')
+        .select('*, salons(name, city)')
+        .eq('client_phone', session.user.user_metadata?.phone || '')
+        .order('created_at', { ascending: false })
+      // fallback: search by email
+      if (!data || data.length === 0) {
+        const { data: d2 } = await supabase.from('bookings')
+          .select('*, salons(name, city)')
+          .order('created_at', { ascending: false })
+          .limit(50)
+        setBookings(d2 || [])
+      } else {
+        setBookings(data)
+      }
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const cancelBooking = async (id) => {
+    await supabase.from('bookings').update({ status:'cancelled' }).eq('id', id)
+    setBookings(b => b.map(bk => bk.id === id ? { ...bk, status:'cancelled' } : bk))
+    toast("تم إلغاء الحجز")
+  }
+
+  const filtered = bookings.filter(b => {
+    if (tab === "active")    return b.status === "pending" || b.status === "confirmed"
+    if (tab === "done")      return b.status === "completed"
+    if (tab === "cancelled") return b.status === "cancelled"
+    return true
+  })
+
+  const STATUS = {
+    pending:   { label:"قيد الانتظار", color:T.gold,    bg:T.goldPale },
+    confirmed: { label:"مؤكد",         color:T.green,   bg:T.greenL },
+    completed: { label:"مكتمل",        color:T.inkSoft, bg:T.creamDk },
+    cancelled: { label:"ملغي",         color:T.red,     bg:T.redL },
+  }
+
+  return (
+    <div style={{ background:T.cream, minHeight:"100vh", paddingBottom:40 }}>
+      <div style={{ background:T.white, borderBottom:`1px solid ${T.roseL}`, padding:"14px 20px", display:"flex", alignItems:"center", gap:12 }}>
+        <button onClick={() => setScreen("client-home")} style={{ width:36, height:36, borderRadius:"50%", border:"none", background:T.cream, cursor:"pointer", fontSize:16 }}>←</button>
+        <div style={{ fontSize:16, fontWeight:800, color:T.ink }}>حجوزاتي 📅</div>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display:"flex", background:T.white, borderBottom:`1px solid ${T.creamDk}` }}>
+        {[
+          { id:"active",    label:"الفعّالة",   icon:"🟢" },
+          { id:"done",      label:"المكتملة",   icon:"✅" },
+          { id:"cancelled", label:"الملغية",    icon:"❌" },
+        ].map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            style={{ flex:1, padding:"12px 8px", border:"none", borderBottom:`3px solid ${tab===t.id ? T.roseDp : "transparent"}`, background:"transparent", cursor:"pointer", fontSize:12, fontWeight:tab===t.id ? 700 : 400, color:tab===t.id ? T.roseDp : T.inkSoft, fontFamily:"Tajawal,sans-serif" }}>
+            {t.icon} {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ padding:"16px 18px" }}>
+        {loading && <div style={{ textAlign:"center", padding:40, color:T.inkSoft }}>...جاري التحميل</div>}
+
+        {!loading && filtered.length === 0 && (
+          <Empty icon="📅" title="لا توجد حجوزات" desc={tab==="active" ? "احجزي موعداً الآن!" : "لا يوجد شيء هنا"} />
+        )}
+
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          {filtered.map(bk => {
+            const st = STATUS[bk.status] || STATUS.pending
+            return (
+              <Card key={bk.id} style={{ padding:16 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
+                  <div>
+                    <div style={{ fontSize:15, fontWeight:800, color:T.ink }}>{bk.salons?.name || "صالون"}</div>
+                    <div style={{ fontSize:12, color:T.inkSoft }}>📍 {bk.salons?.city || ""}</div>
+                  </div>
+                  <span style={{ background:st.bg, color:st.color, fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:20 }}>{st.label}</span>
+                </div>
+
+                <div style={{ background:T.cream, borderRadius:10, padding:"10px 14px", marginBottom:12 }}>
+                  {[
+                    ["📋 الخدمة", bk.service_id || "—"],
+                    ["📅 التاريخ", bk.appointment_date || "—"],
+                    ["⏰ الوقت",  bk.appointment_time || "—"],
+                    ["💰 المبلغ", (bk.total_amount || 0) + " ر.س"],
+                    ["🔒 العربون", (bk.deposit_amount || 0) + " ر.س"],
+                  ].map(row => (
+                    <div key={row[0]} style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"4px 0", borderBottom:`1px solid ${T.creamDk}` }}>
+                      <span style={{ color:T.inkSoft }}>{row[0]}</span>
+                      <span style={{ color:T.ink, fontWeight:600 }}>{row[1]}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {bk.status === "pending" && (
+                  <button onClick={() => cancelBooking(bk.id)}
+                    style={{ width:"100%", padding:"9px", borderRadius:10, border:`1px solid ${T.redL}`, background:T.white, color:T.red, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    إلغاء الحجز
+                  </button>
+                )}
+              </Card>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ══════════════════════════════════════════
    👑 ADMIN DASHBOARD
 ══════════════════════════════════════════ */
@@ -2603,8 +2839,24 @@ function AdminDashboard({ setScreen }) {
    🧭 NAVBAR
 ══════════════════════════════════════════ */
 function Navbar({ screen, setScreen }) {
+  const [user, setUser] = useState(null)
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user || null))
+    const { data: listener } = supabase.auth.onAuthStateChange((_e, session) => setUser(session?.user || null))
+    return () => listener?.subscription?.unsubscribe()
+  }, [])
+
+  const logout = async () => {
+    await supabase.auth.signOut()
+    setUser(null)
+    setScreen("client-home")
+  }
+
   const hide = ["owner-dashboard","admin","booking","owner-register","owner-login","client-register","client-login","payment"]
   if (hide.includes(screen)) return null
+
+  const role = user?.user_metadata?.role
+
   return (
     <nav style={{ background:T.white, borderBottom:`1px solid ${T.roseL}`, padding:"0 18px", display:"flex", alignItems:"center", justifyContent:"space-between", height:54, position:"sticky", top:0, zIndex:500, boxShadow:"0 2px 10px rgba(44,32,24,.06)" }}>
       <div onClick={() => setScreen("client-home")} style={{ display:"flex", alignItems:"center", gap:7, fontSize:17, fontWeight:900, color:T.roseDp, cursor:"pointer" }}>
@@ -2612,17 +2864,34 @@ function Navbar({ screen, setScreen }) {
         بيوتي تيك
       </div>
       <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-        <span onClick={() => setScreen("client-login")} style={{ fontSize:12, fontWeight:600, color:T.inkSoft, cursor:"pointer", padding:"6px 4px" }}>دخول</span>
-        <span onClick={() => setScreen("client-register")} style={{ fontSize:12, fontWeight:600, color:T.inkSoft, cursor:"pointer", padding:"6px 4px" }}>تسجيل</span>
-        <div style={{ width:1, height:18, background:T.roseL }} />
-        <button onClick={() => setScreen("owner-register")}
-          style={{ padding:"7px 12px", borderRadius:50, border:"none", background:`linear-gradient(135deg,${T.gold},${T.gold2})`, color:T.white, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Tajawal,sans-serif", boxShadow:"0 3px 10px rgba(184,160,96,.35)", whiteSpace:"nowrap" }}>
-          ✦ انضمي كصالون
-        </button>
-        <button onClick={() => setScreen("owner-login")}
-          style={{ padding:"7px 12px", borderRadius:50, border:`1.5px solid ${T.roseL}`, background:T.white, color:T.roseDp, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Tajawal,sans-serif", whiteSpace:"nowrap" }}>
-          🏪 دخول المالك
-        </button>
+        {user ? (
+          <>
+            {role === "owner" && (
+              <button onClick={() => setScreen("owner-dashboard")}
+                style={{ padding:"7px 12px", borderRadius:50, border:`1.5px solid ${T.roseL}`, background:T.white, color:T.roseDp, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                🏪 لوحتي
+              </button>
+            )}
+            <button onClick={logout}
+              style={{ padding:"7px 12px", borderRadius:50, border:`1.5px solid ${T.creamDk}`, background:T.white, color:T.inkSoft, fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+              خروج
+            </button>
+          </>
+        ) : (
+          <>
+            <span onClick={() => setScreen("client-login")} style={{ fontSize:12, fontWeight:600, color:T.inkSoft, cursor:"pointer", padding:"6px 4px" }}>دخول</span>
+            <span onClick={() => setScreen("client-register")} style={{ fontSize:12, fontWeight:600, color:T.inkSoft, cursor:"pointer", padding:"6px 4px" }}>تسجيل</span>
+            <div style={{ width:1, height:18, background:T.roseL }} />
+            <button onClick={() => setScreen("owner-register")}
+              style={{ padding:"7px 12px", borderRadius:50, border:"none", background:`linear-gradient(135deg,${T.gold},${T.gold2})`, color:T.white, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Tajawal,sans-serif", boxShadow:"0 3px 10px rgba(184,160,96,.35)", whiteSpace:"nowrap" }}>
+              ✦ انضمي كصالون
+            </button>
+            <button onClick={() => setScreen("owner-login")}
+              style={{ padding:"7px 12px", borderRadius:50, border:`1.5px solid ${T.roseL}`, background:T.white, color:T.roseDp, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Tajawal,sans-serif", whiteSpace:"nowrap" }}>
+              🏪 دخول المالك
+            </button>
+          </>
+        )}
       </div>
     </nav>
   )
@@ -2636,6 +2905,22 @@ export default function App() {
   const [screen, setScreen] = useState("client-home")
   const [salon, setSalon] = useState(null)
   const [payData, setPayData] = useState(null)
+  const [user, setUser] = useState(null)
+
+  // تحقق من الجلسة عند فتح الموقع
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setUser(session.user)
+        const role = session.user.user_metadata?.role
+        if (role === "owner") setScreen("owner-dashboard")
+        else if (role === "client") setScreen("client-home")
+      }
+    })
+    supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null)
+    })
+  }, [])
 
   useEffect(() => {
     document.documentElement.setAttribute("dir", "rtl")
@@ -2670,6 +2955,7 @@ export default function App() {
     if (screen === "privacy")         return <PrivacyPage    setScreen={go} />
     if (screen === "404")             return <NotFoundPage   setScreen={go} />
     if (screen === "gift")             return <GiftPage        setScreen={go} />
+    if (screen === "my-bookings")      return <MyBookingsPage  setScreen={go} />
     return <ClientHome setScreen={go} setSalon={setSalon} />
   }
 
@@ -2685,6 +2971,7 @@ export default function App() {
             <div style={{ margin:"0 16px 16px", background:T.white, borderRadius:16, padding:"18px" }}>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
                 {[
+                  { label:"حجوزاتي", screen:"my-bookings", icon:"📅" },
                   { label:"عن المنصة", screen:"about", icon:"🌸" },
                   { label:"قسيمة هدية", screen:"gift", icon:"🎁" },
                   { label:"تواصل معنا", screen:"contact", icon:"💬" },
