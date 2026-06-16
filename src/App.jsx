@@ -142,6 +142,27 @@ function TermsModal({ open, onClose }) {
 // الصالونات تُجلب من Supabase
 const SALONS = []
 
+
+function getServiceEmoji(name) {
+  const n = (name || "").toLowerCase()
+  if (n.includes("قص") || n.includes("تقصير")) return "✂️"
+  if (n.includes("صبغ") || n.includes("لون")) return "🎨"
+  if (n.includes("كيراتين")) return "💆"
+  if (n.includes("مكياج")) return "💄"
+  if (n.includes("حناء")) return "🌿"
+  if (n.includes("اظافر") || n.includes("أظافر") || n.includes("مناكير")) return "💅"
+  if (n.includes("وجه") || n.includes("بشره") || n.includes("بشرة")) return "✨"
+  if (n.includes("رموش")) return "👁"
+  if (n.includes("حاجب") || n.includes("حواجب")) return "🪮"
+  if (n.includes("شعر")) return "💇"
+  if (n.includes("عروس") || n.includes("زفاف")) return "👰"
+  if (n.includes("مساج") || n.includes("سبا")) return "🧖"
+  if (n.includes("تنظيف")) return "🧴"
+  if (n.includes("بروتين")) return "💊"
+  if (n.includes("سشوار") || n.includes("تمليس")) return "💨"
+  return "💅"
+}
+
 function useSalons() {
   const [data, setData] = useState([])
   useEffect(() => {
@@ -817,7 +838,7 @@ function SalonDetailPage({ salon, setScreen, setSalon }) {
           {services.map((sv, i) => (
             <Card key={i} style={{ padding:"14px 16px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div>
-                <div style={{ fontSize:14, fontWeight:700, color:T.ink }}>{sv.n}</div>
+                <div style={{ fontSize:14, fontWeight:700, color:T.ink }}>{getServiceEmoji(sv.n)} {sv.n}</div>
                 <div style={{ fontSize:12, color:T.inkSoft, marginTop:3 }}>
                   ⏱ {sv.dur < 60 ? sv.dur+"د" : Math.floor(sv.dur/60)+"س"+(sv.dur%60>0?sv.dur%60+"د":"")}
                   {sv.timeFrom && ` · ${sv.timeFrom}—${sv.timeTo}`}
@@ -835,6 +856,177 @@ function SalonDetailPage({ salon, setScreen, setSalon }) {
         <PBtn full onClick={() => { setSalon(salon); setScreen("booking") }}>
           احجزي الآن ←
         </PBtn>
+      </div>
+    </div>
+  )
+}
+
+
+/* ══════════════════════════════════════════
+   🎁 GIFT PAGE — إهداء للأحباب
+══════════════════════════════════════════ */
+function GiftBookingPage({ setScreen, setSalon, salons }) {
+  const toast = useToast()
+  const [step, setStep] = useState(1)
+  const [selectedSalon, setSelectedSalon] = useState(null)
+  const [selectedService, setSelectedService] = useState(null)
+  const [services, setServices] = useState([])
+  const [recipientName, setRecipientName] = useState("")
+  const [recipientPhone, setRecipientPhone] = useState("")
+  const [giftMessage, setGiftMessage] = useState("")
+  const [giftCode, setGiftCode] = useState("")
+  const [loading, setLoading] = useState(false)
+
+  const loadServices = async (salon) => {
+    setSelectedSalon(salon)
+    const { data } = await supabase.from('services').select('*').eq('salon_id', salon.id).eq('active', true)
+    setServices(data || [])
+    setStep(2)
+  }
+
+  const sendGift = async () => {
+    if (!recipientName || !recipientPhone) { toast("⚠ أدخلي اسم وجوال المهدى إليها"); return }
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) { setScreen("client-login"); return }
+    setLoading(true)
+    const code = "BT" + Math.random().toString(36).substr(2,6).toUpperCase()
+    const { error } = await supabase.from('bookings').insert([{
+      salon_id: selectedSalon.id,
+      client_name: recipientName,
+      client_phone: recipientPhone,
+      total_amount: selectedService.price,
+      deposit_amount: Math.round(selectedService.price * 0.3),
+      status: 'pending',
+      booking_type: 'gift',
+      service_name: selectedService.name,
+      user_id: session.user.id,
+    }])
+    setLoading(false)
+    if (error) { toast("⚠ حدث خطأ"); return }
+    setGiftCode(code)
+    setStep(4)
+  }
+
+  if (step === 4) return (
+    <div style={{ background:T.cream, minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+      <div style={{ textAlign:"center", maxWidth:340 }}>
+        <div style={{ fontSize:60, marginBottom:16 }}>🎁</div>
+        <h2 style={{ fontSize:22, fontWeight:900, color:T.ink, marginBottom:10 }}>تم إرسال الهدية!</h2>
+        <div style={{ background:T.white, borderRadius:16, padding:"20px", marginBottom:20, border:`2px solid ${T.roseL}` }}>
+          <div style={{ fontSize:13, color:T.inkSoft, marginBottom:8 }}>كود الهدية</div>
+          <div style={{ fontSize:28, fontWeight:900, color:T.roseDp, letterSpacing:4 }}>{giftCode}</div>
+          <div style={{ fontSize:12, color:T.inkSoft, marginTop:8 }}>أرسلي الكود لـ {recipientName}</div>
+        </div>
+        <div style={{ background:T.goldPale, borderRadius:12, padding:"12px 16px", marginBottom:20, fontSize:12, color:T.inkSoft, lineHeight:1.8 }}>
+          🌸 {recipientName} تقدر تستخدم الكود عند حجزها في {selectedSalon.name}
+        </div>
+        <PBtn full onClick={() => setScreen("client-home")}>العودة للرئيسية</PBtn>
+      </div>
+    </div>
+  )
+
+  return (
+    <div style={{ background:T.cream, minHeight:"100vh", paddingBottom:40 }}>
+      <div style={{ background:T.white, borderBottom:`1px solid ${T.roseL}`, padding:"14px 20px", display:"flex", alignItems:"center", gap:12, position:"sticky", top:0, zIndex:100 }}>
+        <button onClick={() => step > 1 ? setStep(s => s-1) : setScreen("client-home")}
+          style={{ width:36, height:36, borderRadius:"50%", border:"none", background:T.cream, cursor:"pointer", fontSize:16 }}>←</button>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:15, fontWeight:800, color:T.ink }}>🎁 إهداء للأحباب</div>
+          <div style={{ fontSize:11, color:T.inkSoft }}>خطوة {step} من 3</div>
+        </div>
+      </div>
+
+      {/* Progress */}
+      <div style={{ display:"flex", gap:4, padding:"12px 18px" }}>
+        {[1,2,3].map(s => (
+          <div key={s} style={{ flex:1, height:4, borderRadius:4, background:step >= s ? T.roseDp : T.creamDk, transition:"background .3s" }} />
+        ))}
+      </div>
+
+      <div style={{ padding:"0 18px" }}>
+        {/* خطوة ١ — اختاري الصالون */}
+        {step === 1 && (
+          <div>
+            <div style={{ fontSize:16, fontWeight:800, color:T.ink, marginBottom:16 }}>اختاري الصالون</div>
+            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+              {salons.map(s => (
+                <div key={s.id} onClick={() => loadServices(s)}
+                  style={{ background:T.white, borderRadius:14, padding:"14px 16px", cursor:"pointer", display:"flex", alignItems:"center", gap:12, border:`1.5px solid ${T.creamDk}` }}>
+                  <div style={{ width:48, height:48, borderRadius:12, background:`linear-gradient(135deg,${T.roseL},${T.goldPale})`, overflow:"hidden", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:22 }}>
+                    {s.imageUrl ? <img src={s.imageUrl} style={{ width:"100%", height:"100%", objectFit:"cover" }} /> : "💅"}
+                  </div>
+                  <div>
+                    <div style={{ fontSize:14, fontWeight:700, color:T.ink }}>{s.name}</div>
+                    <div style={{ fontSize:12, color:T.inkSoft }}>📍 {s.city}</div>
+                  </div>
+                  <span style={{ marginRight:"auto", fontSize:16, color:T.inkMuted }}>←</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* خطوة ٢ — اختاري الخدمة */}
+        {step === 2 && (
+          <div>
+            <div style={{ fontSize:16, fontWeight:800, color:T.ink, marginBottom:4 }}>اختاري الخدمة</div>
+            <div style={{ fontSize:13, color:T.inkSoft, marginBottom:16 }}>{selectedSalon?.name}</div>
+            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+              {services.map(sv => (
+                <div key={sv.id} onClick={() => { setSelectedService(sv); setStep(3) }}
+                  style={{ background:T.white, borderRadius:14, padding:"14px 16px", cursor:"pointer", display:"flex", justifyContent:"space-between", alignItems:"center", border:`1.5px solid ${selectedService?.id===sv.id ? T.roseDp : T.creamDk}` }}>
+                  <div>
+                    <div style={{ fontSize:14, fontWeight:700, color:T.ink }}>{getServiceEmoji(sv.name)} {sv.name}</div>
+                    <div style={{ fontSize:12, color:T.inkSoft }}>⏱ {sv.duration < 60 ? sv.duration+"د" : Math.floor(sv.duration/60)+"س"}</div>
+                  </div>
+                  <div style={{ textAlign:"left" }}>
+                    <div style={{ fontSize:16, fontWeight:900, color:T.gold }}>{sv.price}</div>
+                    <div style={{ fontSize:10, color:T.inkSoft }}>ر.س</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* خطوة ٣ — بيانات المهدى إليها */}
+        {step === 3 && (
+          <div>
+            <div style={{ fontSize:16, fontWeight:800, color:T.ink, marginBottom:4 }}>بيانات المهدى إليها</div>
+            <div style={{ fontSize:13, color:T.inkSoft, marginBottom:16 }}>{getServiceEmoji(selectedService?.name)} {selectedService?.name} — {selectedService?.price} ر.س</div>
+
+            <Card style={{ padding:16, marginBottom:14 }}>
+              <div style={{ marginBottom:12 }}>
+                <label style={{ fontSize:12, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:6 }}>اسم المهدى إليها *</label>
+                <input value={recipientName} onChange={e => setRecipientName(e.target.value)} placeholder="اسمها الكامل"
+                  style={{ width:"100%", padding:"12px 14px", border:`1.5px solid ${T.creamDk}`, borderRadius:12, fontSize:14, color:T.ink, background:T.cream, outline:"none", fontFamily:"Tajawal,sans-serif" }} />
+              </div>
+              <div style={{ marginBottom:12 }}>
+                <label style={{ fontSize:12, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:6 }}>رقم جوالها *</label>
+                <input type="tel" value={recipientPhone} onChange={e => setRecipientPhone(e.target.value)} placeholder="05xxxxxxxx"
+                  style={{ width:"100%", padding:"12px 14px", border:`1.5px solid ${T.creamDk}`, borderRadius:12, fontSize:14, color:T.ink, background:T.cream, outline:"none", fontFamily:"Tajawal,sans-serif" }} />
+              </div>
+              <div>
+                <label style={{ fontSize:12, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:6 }}>رسالة الهدية (اختياري)</label>
+                <textarea value={giftMessage} onChange={e => setGiftMessage(e.target.value)} placeholder="أتمنى لكِ وقتاً جميلاً 🌸" rows={3}
+                  style={{ width:"100%", padding:"12px 14px", border:`1.5px solid ${T.creamDk}`, borderRadius:12, fontSize:14, color:T.ink, background:T.cream, outline:"none", fontFamily:"Tajawal,sans-serif", resize:"none" }} />
+              </div>
+            </Card>
+
+            <div style={{ background:T.goldPale, borderRadius:12, padding:"12px 16px", marginBottom:16, border:`1px solid ${T.goldL}` }}>
+              <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>ملخص الهدية 🎁</div>
+              <div style={{ fontSize:12, color:T.inkSoft, marginTop:6 }}>
+                الصالون: {selectedSalon?.name}<br/>
+                الخدمة: {selectedService?.name}<br/>
+                القيمة: {selectedService?.price} ر.س
+              </div>
+            </div>
+
+            <PBtn full disabled={loading} onClick={sendGift}>
+              {loading ? "...جاري الإرسال" : "🎁 إرسال الهدية ←"}
+            </PBtn>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -883,6 +1075,17 @@ function BookingPage({ salon, setScreen }) {
       booking_type: svc?.isOffer ? (svc.offerType || "offer") : "service",
     }])
     if (error) { toast("⚠ حدث خطأ: " + error.message); return }
+    // إشعار واتساب للصالون
+    if (salon?.wa) {
+      const msg = encodeURIComponent(`🌸 حجز جديد!
+العميلة: ${name}
+الجوال: ${phone}
+الخدمة: ${svc?.n || ""}
+التاريخ: ${date}
+الوقت: ${time}
+المبلغ: ${svc?.p || 0} ر.س`)
+      window.open(`https://wa.me/966${(salon.wa).replace(/^0/, "")}?text=${msg}`, "_blank")
+    }
     toast("✅ تم الحجز! سيصلكِ تأكيد على واتساب")
     setTimeout(() => setScreen("client-home"), 1500)
   }
@@ -919,7 +1122,7 @@ function BookingPage({ salon, setScreen }) {
                 <div key={sv.n} onClick={() => setSvc(sv)}
                   style={{ background:T.white, borderRadius:14, padding:"14px 16px", border:`2px solid ${svc && svc.n === sv.n ? T.roseDp : T.creamDk}`, cursor:"pointer", display:"flex", justifyContent:"space-between", alignItems:"center", transition:"all .2s" }}>
                   <div>
-                    <div style={{ fontSize:14, fontWeight:700, color:T.ink }}>{sv.n}</div>
+                    <div style={{ fontSize:14, fontWeight:700, color:T.ink }}>{getServiceEmoji(sv.n)} {sv.n}</div>
                     {svc && svc.n === sv.n && <div style={{ fontSize:12, color:T.rose, marginTop:3 }}>عربون: {Math.round(sv.p * 0.3)} ر.س</div>}
                   </div>
                   <div style={{ fontSize:16, fontWeight:800, color:svc && svc.n === sv.n ? T.roseDp : T.gold }}>{sv.p} ر.س</div>
@@ -4219,6 +4422,7 @@ export default function App() {
     if (screen === "client-register") return <ClientRegister setScreen={go} />
     if (screen === "booking")         return <BookingPage salon={salon} setScreen={go} />
     if (screen === "salon-detail")     return <SalonDetailPage salon={salon} setScreen={go} setSalon={setSalon} />
+    if (screen === "gift-booking")      return <GiftBookingPage setScreen={go} setSalon={setSalon} salons={salons} />
     if (screen === "owner-register")  return <OwnerRegister setScreen={go} />
     if (screen === "owner-login")     return <OwnerLogin setScreen={go} />
     if (screen === "owner-dashboard") return <OwnerDashboard setScreen={go} />
@@ -4247,6 +4451,7 @@ export default function App() {
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
                 {[
                   { label:"حجوزاتي", screen:"my-bookings", icon:"📅" },
+                  { label:"إهداء 🎁", screen:"gift-booking", icon:"🎁" },
                   { label:"عن المنصة", screen:"about", icon:"🌸" },
                   { label:"قسيمة هدية", screen:"gift", icon:"🎁" },
                   { label:"تواصل معنا", screen:"contact", icon:"💬" },
