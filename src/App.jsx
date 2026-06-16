@@ -2922,13 +2922,16 @@ function OwnerSettings({ toast }) {
         <div style={{ fontSize:14, fontWeight:800, color:T.ink, marginBottom:6 }}>صور الصالون</div>
         <div style={{ fontSize:12, color:T.inkSoft, marginBottom:14 }}>أضيفي صوراً للصالون وأعمالكِ — تظهر للعملاء</div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:12 }}>
-          {photos.map((p,i) => (
-            <div key={i} style={{ aspectRatio:"1", background:T.roseL, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:24, position:"relative" }}>
-              🖼
-              <button onClick={() => setPhotos(ph => ph.filter((_,j) => j !== i))}
-                style={{ position:"absolute", top:4, left:4, width:20, height:20, borderRadius:"50%", background:T.red, border:"none", color:"#fff", fontSize:10, cursor:"pointer" }}>✕</button>
+          {form.imageUrl && (
+            <div style={{ aspectRatio:"1", borderRadius:10, overflow:"hidden", position:"relative" }}>
+              <img src={form.imageUrl} alt="صورة الصالون" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+              <button onClick={async () => {
+                await supabase.from('salons').update({ image_url: null }).eq('id', salonId)
+                setForm(f => ({ ...f, imageUrl:"" }))
+                toast("🗑 تم حذف الصورة")
+              }} style={{ position:"absolute", top:4, left:4, width:22, height:22, borderRadius:"50%", background:T.red, border:"none", color:"#fff", fontSize:11, cursor:"pointer" }}>✕</button>
             </div>
-          ))}
+          )}
           <label style={{ aspectRatio:"1", background:T.cream, borderRadius:10, border:`2px dashed ${T.roseL}`, cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:4 }}>
             <span style={{ fontSize:22 }}>+</span>
             <span style={{ fontSize:10, color:T.inkSoft }}>إضافة صورة</span>
