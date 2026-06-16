@@ -1351,7 +1351,7 @@ function OwnerDashboard({ setScreen }) {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) return
-      supabase.from('salons').select('name,trial_end,city').eq('email', session.user.email).then(({ data }) => {
+      supabase.from('salons').select('name,trial_end,city,owner_name,phone,bio,email').eq('email', session.user.email).then(({ data }) => {
         if (data && data[0]) setSalonInfo(data[0])
       })
     })
@@ -1366,9 +1366,9 @@ function OwnerDashboard({ setScreen }) {
       {/* Top bar */}
       <div style={{ background:T.white, borderBottom:`1px solid ${T.roseL}`, padding:"12px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", position:"sticky", top:0, zIndex:200 }}>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-          <div style={{ width:36, height:36, borderRadius:"50%", background:`linear-gradient(135deg,${T.roseL},${T.goldPale})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>💅</div>
+          <div style={{ width:44, height:44, borderRadius:"50%", background:`linear-gradient(135deg,${T.roseL},${T.goldPale})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, flexShrink:0 }}>💅</div>
           <div>
-            <div style={{ fontSize:13, fontWeight:800, color:T.ink }}>{salonInfo.name}</div>
+            <div style={{ fontSize:14, fontWeight:900, color:T.ink }}>{salonInfo.name || "..."}</div>
             <div style={{ fontSize:11, color:T.roseDp, fontWeight:700 }}>🎁 تجربة مجانية — باقي {daysLeft} يوم</div>
           </div>
         </div>
@@ -1378,6 +1378,14 @@ function OwnerDashboard({ setScreen }) {
         </button>
       </div>
 
+      {/* Salon quick info */}
+      {(salonInfo.name) && (
+        <div style={{ background:T.cream, padding:"10px 18px", borderBottom:`1px solid ${T.creamDk}`, display:"flex", flexDirection:"column", gap:4 }}>
+          {salonInfo.phone && <span style={{ fontSize:12, color:T.inkSoft }}>📞 {salonInfo.phone}</span>}
+          {salonInfo.email && <span style={{ fontSize:12, color:T.inkSoft }}>📧 {salonInfo.email}</span>}
+          {salonInfo.bio && <span style={{ fontSize:12, color:T.inkSoft }}>💬 {salonInfo.bio}</span>}
+        </div>
+      )}
       {/* Trial progress bar */}
       <div style={{ background:"linear-gradient(135deg,#FFF8F5,#FFF3E8)", borderBottom:`1px solid ${T.roseL}`, padding:"10px 18px" }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
@@ -2058,13 +2066,17 @@ function OwnerServices({ toast }) {
   const [services, setServices] = useState([])
   const [loadingSvcs, setLoadingSvcs] = useState(true)
 
+  const [ownerSalonId, setOwnerSalonId] = useState(null)
+
   useEffect(() => {
     const load = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) { setLoadingSvcs(false); return }
       const { data: salon } = await supabase.from('salons').select('id').eq('email', session.user.email)
       if (!salon || !salon[0]) { setLoadingSvcs(false); return }
-      const { data: svcs } = await supabase.from('services').select('*').eq('salon_id', salon[0].id)
+      const sid = salon[0].id
+      setOwnerSalonId(sid)
+      const { data: svcs } = await supabase.from('services').select('*').eq('salon_id', sid)
       if (svcs) setServices(svcs.map(s => ({
         id: s.id,
         name: s.name,
@@ -2114,9 +2126,9 @@ function OwnerServices({ toast }) {
   const addService = async () => {
     if (!newSvc.name || !newSvc.price) { toast("⚠ أدخلي اسم الخدمة والسعر"); return }
     if (newSvc.days.length === 0) { toast("⚠ اختاري يوم واحد على الأقل"); return }
-    const newItem = { id:Date.now(), ...newSvc, price:Number(newSvc.price), active:true }
-    setServices(s => [...s, newItem])
-    await supabase.from('services').insert([{
+    if (!ownerSalonId) { toast("⚠ لم يتم التعرف على الصالون"); return }
+    const { data, error } = await supabase.from('services').insert([{
+      salon_id: ownerSalonId,
       name: newSvc.name,
       price: Number(newSvc.price),
       duration: newSvc.duration,
@@ -2124,7 +2136,20 @@ function OwnerServices({ toast }) {
       time_from: newSvc.timeFrom,
       time_to: newSvc.timeTo,
       active: true,
-    }])
+    }]).select()
+    if (error) { toast("⚠ حدث خطأ: " + error.message); return }
+    if (data && data[0]) {
+      setServices(s => [...s, {
+        id: data[0].id,
+        name: data[0].name,
+        price: data[0].price,
+        duration: data[0].duration || 60,
+        active: true,
+        days: data[0].days || [],
+        timeFrom: data[0].time_from || "09:00",
+        timeTo: data[0].time_to || "18:00",
+      }])
+    }
     setNewSvc({ name:"", price:"", duration:60, days:["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس"], timeFrom:"09:00", timeTo:"18:00" })
     setShowAdd(false)
     toast("✅ تمت إضافة الخدمة!")
@@ -2134,7 +2159,8 @@ function OwnerServices({ toast }) {
     setServices(s => s.map(sv => sv.id === id ? { ...sv, active:!sv.active } : sv))
   }
 
-  const deleteService = (id) => {
+  const deleteService = async (id) => {
+    await supabase.from('services').delete().eq('id', id)
     setServices(s => s.filter(sv => sv.id !== id))
     toast("🗑 تم حذف الخدمة")
   }
