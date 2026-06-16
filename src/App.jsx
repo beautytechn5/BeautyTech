@@ -291,11 +291,11 @@ function HomeOffersSection({ setScreen, setSalon, salons }) {
     const { data: { session } } = await supabase.auth.getSession()
     const salon = salons.find(s => s.id === offer.salon_id) || { id: offer.salon_id, name: offer.salons?.name || "", city: offer.salons?.city || "", services:[], wa: offer.salons?.phone || "" }
     if (!session) {
-      setSalon({ ...salon, services: [{ n: offer.title, p: offer.discounted_price, dur:60, isOffer:true }] })
+      setSalon({ ...salon, services: [{ n: offer.title, p: offer.discounted_price, dur:60, isOffer:true, offerType: offer.type }] })
       setScreen("client-login")
       return
     }
-    setSalon({ ...salon, services: [{ n: offer.title, p: offer.discounted_price, dur:60, isOffer:true }] })
+    setSalon({ ...salon, services: [{ n: offer.title, p: offer.discounted_price, dur:60, isOffer:true, offerType: offer.type }] })
     setScreen("booking")
   }
 
@@ -698,7 +698,7 @@ function SalonOffers({ salonId, setScreen, setSalon, salon }) {
     // احجز العرض مباشرة
     setSalon({
       ...salon,
-      services: [{ n: offer.title, p: offer.discounted_price, dur: 60, isOffer: true, offerId: offer.id }]
+      services: [{ n: offer.title, p: offer.discounted_price, dur: 60, isOffer: true, offerId: offer.id, offerType: offer.type }]
     })
     setScreen("booking")
   }
@@ -875,7 +875,7 @@ function BookingPage({ salon, setScreen }) {
       status: 'pending',
       user_id: session?.user?.id || null,
       service_name: svc ? svc.n : "",
-      booking_type: svc?.isOffer ? "offer" : "service",
+      booking_type: svc?.isOffer ? (svc.offerType || "offer") : "service",
     }])
     if (error) { toast("⚠ حدث خطأ: " + error.message); return }
     toast("✅ تم الحجز! سيصلكِ تأكيد على واتساب")
@@ -1794,8 +1794,10 @@ function OwnerRecentBookings({ stats }) {
                   <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{bk.client_name}</div>
                   <div style={{ fontSize:11, color:T.inkSoft }}>{bk.appointment_date} · {bk.appointment_time}</div>
                 </div>
-                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
                   <span style={{ background:st.bg, color:st.color, fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>{st.label}</span>
+                  {bk.booking_type === "offer" && <span style={{ background:T.roseL, color:T.roseDp, fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>🏷️ عرض</span>}
+                  {bk.booking_type === "package" && <span style={{ background:T.goldPale, color:T.gold, fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>🎁 باقة</span>}
                   <span style={{ fontSize:11, color:T.inkMuted }}>{selected===bk.id ? "▲" : "▼"}</span>
                 </div>
               </div>
@@ -3744,7 +3746,11 @@ function MyBookingsPage({ setScreen }) {
                     <div style={{ fontSize:15, fontWeight:800, color:T.ink }}>{bk.salons?.name || "صالون"}</div>
                     <div style={{ fontSize:12, color:T.inkSoft }}>📍 {bk.salons?.city || ""}</div>
                   </div>
+                  <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4 }}>
                   <span style={{ background:st.bg, color:st.color, fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:20 }}>{st.label}</span>
+                  {bk.booking_type === "offer" && <span style={{ background:T.roseL, color:T.roseDp, fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>🏷️ عرض</span>}
+                  {bk.booking_type === "package" && <span style={{ background:T.goldPale, color:T.gold, fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>🎁 باقة</span>}
+                </div>
                 </div>
 
                 <div style={{ background:T.cream, borderRadius:10, padding:"10px 14px", marginBottom:12 }}>
