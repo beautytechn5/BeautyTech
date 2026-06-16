@@ -167,7 +167,8 @@ function useSalons() {
         wa: (s.phone || "0500000000"),
         mapUrl: s.map_url || "",
         availNow: true,
-        hasOffers: (allOffers || []).some(o => o.salon_id === s.id),
+        hasOffers: (allOffers || []).some(o => o.salon_id === s.id && o.type === 'offer'),
+        hasPackages: (allOffers || []).some(o => o.salon_id === s.id && o.type === 'package'),
       })))
     }
     load()
@@ -276,6 +277,7 @@ function TypingText() {
 
 function ClientHome({ setScreen, setSalon }) {
   const salons = useSalons()
+  const [filterType, setFilterType] = useState("")
   const [q, setQ]           = useState("")
   const [fq, setFq]         = useState(false)
   const [showSugg, setShowSugg] = useState(false)
@@ -291,7 +293,7 @@ function ClientHome({ setScreen, setSalon }) {
     : SUGGESTIONS.slice(0, 6)
 
   // فلترة + ترتيب الصالونات
-  let list = salons.filter(s => {
+  let list = salons.filter(s => !filterType || (filterType==="offers" ? s.hasOffers : filterType==="packages" ? s.hasPackages : true)).filter(s => {
     if (availNow && !s.availNow) return false
     if (q && !s.name.includes(q) && !s.area.includes(q) && !(s.tags || []).some(t => t.includes(q))) return false
     const minP = s.services && s.services.length > 0 ? Math.min(...s.services.map(sv => sv.p)) : 0
@@ -605,8 +607,11 @@ function SalonOffers({ salonId, setScreen, setSalon, salon }) {
   const bookOffer = async (offer) => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { setScreen("client-login"); return }
-    // روح لصفحة الحجز
-    setSalon({ ...salon, selectedOffer: offer })
+    // احجز العرض مباشرة
+    setSalon({
+      ...salon,
+      services: [{ n: offer.title, p: offer.discounted_price, dur: 60, isOffer: true, offerId: offer.id }]
+    })
     setScreen("booking")
   }
 
@@ -1404,6 +1409,7 @@ const OWN_TABS = [
   { id:"bookings",  icon:"📅", label:"الحجوزات" },
   { id:"services",  icon:"✂️",  label:"الخدمات" },
   { id:"offers",    icon:"🏷️",  label:"عروض" },
+  { id:"packages",  icon:"🎁",  label:"باقات" },
   { id:"inventory", icon:"🧴", label:"المخزون" },
   { id:"whatsapp",  icon:"💬", label:"بوت واتساب" },
   { id:"package",   icon:"📦", label:"باقتي" },
@@ -1491,7 +1497,8 @@ function OwnerDashboard({ setScreen }) {
         {tab === "whatsapp"  && <OwnerWhatsapp toast={toast} />}
         {tab === "settings"  && <OwnerSettings toast={toast} />}
         {tab === "package"   && <OwnerPackage toast={toast} />}
-        {tab === "offers"    && <OwnerOffers toast={toast} />}
+        {tab === "offers"    && <OwnerOffers toast={toast} type="offer" />}
+        {tab === "packages"  && <OwnerOffers toast={toast} type="package" />}
       </div>
     </div>
   )
@@ -2455,13 +2462,14 @@ function OwnerServices({ toast }) {
 ══════════════════════════════════════════ */
 
 
-function OwnerOffers({ toast }) {
+function OwnerOffers({ toast, type = "offer" }) {
   const [offers, setOffers] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [salonId, setSalonId] = useState(null)
-  const [form, setForm] = useState({ type:"offer", title:"", description:"", original_price:"", discounted_price:"", valid_until:"" })
+  const [form, setForm] = useState({ type, title:"", description:"", original_price:"", discounted_price:"", valid_until:"" })
   const [saving, setSaving] = useState(false)
+  const [editId, setEditId] = useState(null)
   const set = k => e => setForm(f => ({ ...f, [k]:e.target.value }))
 
   useEffect(() => {
@@ -2471,7 +2479,7 @@ function OwnerOffers({ toast }) {
       const { data: salon } = await supabase.from('salons').select('id').eq('email', session.user.email)
       if (!salon || !salon[0]) { setLoading(false); return }
       setSalonId(salon[0].id)
-      const { data } = await supabase.from('offers').select('*').eq('salon_id', salon[0].id).order('created_at', { ascending:false })
+      const { data } = await supabase.from('offers').select('*').eq('salon_id', salon[0].id).eq('type', type).order('created_at', { ascending:false })
       setOffers(data || [])
       setLoading(false)
     }
@@ -2482,22 +2490,32 @@ function OwnerOffers({ toast }) {
     if (!form.title || !form.discounted_price) { toast("⚠ أدخلي العنوان والسعر"); return }
     if (!salonId) { toast("⚠ لم يتم التعرف على الصالون"); return }
     setSaving(true)
-    const { data, error } = await supabase.from('offers').insert([{
-      salon_id: salonId,
-      type: form.type,
-      title: form.title,
-      description: form.description,
-      original_price: Number(form.original_price) || null,
-      discounted_price: Number(form.discounted_price),
-      valid_until: form.valid_until || null,
-      active: true,
-    }]).select()
-    setSaving(false)
-    if (error) { toast("⚠ " + error.message); return }
-    if (data) setOffers(o => [data[0], ...o])
-    setForm({ type:"offer", title:"", description:"", original_price:"", discounted_price:"", valid_until:"" })
+    if (editId) {
+      // تعديل
+      const { error } = await supabase.from('offers').update({
+        title: form.title, description: form.description,
+        original_price: Number(form.original_price) || null,
+        discounted_price: Number(form.discounted_price),
+        valid_until: form.valid_until || null,
+      }).eq('id', editId)
+      setSaving(false)
+      if (error) { toast("⚠ " + error.message); return }
+      setOffers(o => o.map(x => x.id === editId ? { ...x, ...form, original_price:Number(form.original_price)||null, discounted_price:Number(form.discounted_price) } : x))
+      setEditId(null)
+      toast("✅ تم التعديل!")
+    } else {
+      const { data, error } = await supabase.from('offers').insert([{
+        salon_id: salonId, type: form.type, title: form.title,
+        description: form.description, original_price: Number(form.original_price) || null,
+        discounted_price: Number(form.discounted_price), valid_until: form.valid_until || null, active: true,
+      }]).select()
+      setSaving(false)
+      if (error) { toast("⚠ " + error.message); return }
+      if (data) setOffers(o => [data[0], ...o])
+      toast("✅ تمت الإضافة!")
+    }
+    setForm({ type, title:"", description:"", original_price:"", discounted_price:"", valid_until:"" })
     setShowAdd(false)
-    toast("✅ تمت الإضافة!")
   }
 
   const deleteOffer = async (id) => {
@@ -2515,7 +2533,7 @@ function OwnerOffers({ toast }) {
     <div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
         <div>
-          <div style={{ fontSize:16, fontWeight:800, color:T.ink }}>العروض والباقات</div>
+          <div style={{ fontSize:16, fontWeight:800, color:T.ink }}>{type === "offer" ? "🏷️ العروض الخاصة" : "🎁 الباقات"}</div>
           <div style={{ fontSize:11, color:T.inkSoft }}>تظهر للعملاء في صفحة الصالون</div>
         </div>
         <PBtn sm onClick={() => setShowAdd(!showAdd)}>+ إضافة</PBtn>
@@ -2525,15 +2543,7 @@ function OwnerOffers({ toast }) {
         <Card style={{ padding:16, marginBottom:14, border:`2px solid ${T.roseL}` }}>
           <div style={{ fontSize:13, fontWeight:800, color:T.ink, marginBottom:12 }}>إضافة عرض أو باقة</div>
           
-          {/* نوع */}
-          <div style={{ display:"flex", gap:8, marginBottom:14 }}>
-            {[{ id:"offer", label:"🏷️ عرض خاص" }, { id:"package", label:"📦 باقة" }].map(t => (
-              <button key={t.id} onClick={() => setForm(f => ({ ...f, type:t.id }))}
-                style={{ flex:1, padding:"10px", borderRadius:12, border:`2px solid ${form.type===t.id ? T.roseDp : T.creamDk}`, background:form.type===t.id ? T.roseL : T.white, color:form.type===t.id ? T.roseDp : T.inkSoft, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
-                {t.label}
-              </button>
-            ))}
-          </div>
+
 
           <div style={{ marginBottom:10 }}>
             <label style={{ fontSize:12, color:T.inkSoft, display:"block", marginBottom:5 }}>العنوان *</label>
@@ -2574,7 +2584,7 @@ function OwnerOffers({ toast }) {
       )}
 
       {loading && <div style={{ textAlign:"center", padding:30, color:T.inkSoft }}>...جاري التحميل</div>}
-      {!loading && offers.length === 0 && <Empty icon="🏷️" title="لا توجد عروض بعد" desc="أضيفي عرضاً أو باقة لجذب العملاء" />}
+      {!loading && offers.length === 0 && <Empty icon={type==="offer" ? "🏷️" : "🎁"} title={type==="offer" ? "لا توجد عروض بعد" : "لا توجد باقات بعد"} desc="أضيفي واحدة لجذب العملاء" />}
 
       <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
         {offers.map(o => {
@@ -2600,6 +2610,8 @@ function OwnerOffers({ toast }) {
                     style={{ padding:"4px 10px", borderRadius:20, border:`1px solid ${o.active ? T.green : T.creamDk}`, background:o.active ? T.greenL : T.cream, color:o.active ? T.green : T.inkSoft, fontSize:10, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
                     {o.active ? "✓ فعّال" : "متوقف"}
                   </button>
+                  <button onClick={() => { setForm({ type:o.type, title:o.title, description:o.description||"", original_price:o.original_price||"", discounted_price:o.discounted_price, valid_until:o.valid_until||"" }); setEditId(o.id); setShowAdd(true) }}
+                    style={{ width:26, height:26, borderRadius:"50%", border:`1px solid ${T.goldL}`, background:T.goldPale, color:T.gold, fontSize:12, cursor:"pointer" }}>✏</button>
                   <button onClick={() => deleteOffer(o.id)}
                     style={{ width:26, height:26, borderRadius:"50%", border:`1px solid ${T.redL}`, background:T.white, color:T.red, fontSize:12, cursor:"pointer" }}>✕</button>
                 </div>
