@@ -150,6 +150,7 @@ function useSalons() {
       if (!rows) return
       // جلب الخدمات لكل صالون
       const { data: allServices } = await supabase.from('services').select('*').eq('active', true)
+      const { data: allOffers } = await supabase.from('offers').select('salon_id').eq('active', true)
       setData(rows.map(s => ({
         id: s.id,
         name: s.name || "",
@@ -159,13 +160,14 @@ function useSalons() {
         pkg: s.package || "basic",
         rating: 5.0,
         reviews: 0,
-        tags: s.bio ? [s.bio.slice(0,10)] : [],
+        tags: s.bio ? [s.bio.slice(0,20)] : [],
         services: (allServices || [])
           .filter(sv => sv.salon_id === s.id)
           .map(sv => ({ n: sv.name, p: sv.price, dur: sv.duration, timeFrom: sv.time_from, timeTo: sv.time_to, days: sv.days })),
         wa: (s.phone || "0500000000"),
         mapUrl: s.map_url || "",
         availNow: true,
+        hasOffers: (allOffers || []).some(o => o.salon_id === s.id),
       })))
     }
     load()
@@ -585,6 +587,67 @@ function ClientHome({ setScreen, setSalon }) {
 /* ══════════════════════════════════════════
    🏪 SALON DETAIL PAGE
 ══════════════════════════════════════════ */
+
+function SalonOffers({ salonId, setScreen, setSalon, salon }) {
+  const [offers, setOffers] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!salonId) return
+    supabase.from('offers').select('*').eq('salon_id', salonId).eq('active', true).then(({ data }) => {
+      setOffers(data || [])
+      setLoading(false)
+    })
+  }, [salonId])
+
+  if (loading || offers.length === 0) return null
+
+  const bookOffer = async (offer) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) { setScreen("client-login"); return }
+    // روح لصفحة الحجز
+    setSalon({ ...salon, selectedOffer: offer })
+    setScreen("booking")
+  }
+
+  return (
+    <div style={{ marginBottom:16 }}>
+      <div style={{ fontSize:15, fontWeight:800, color:T.ink, marginBottom:12 }}>🏷️ العروض والباقات</div>
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        {offers.map(o => {
+          const disc = o.original_price ? Math.round((1 - o.discounted_price/o.original_price)*100) : 0
+          return (
+            <div key={o.id} style={{ background:`linear-gradient(135deg,${T.roseL},${T.goldPale})`, borderRadius:16, padding:"14px 16px", border:`1.5px solid ${T.rose}` }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
+                    <span>{o.type==="package" ? "📦" : "🏷️"}</span>
+                    <div style={{ fontSize:14, fontWeight:800, color:T.ink }}>{o.title}</div>
+                    {disc > 0 && <span style={{ background:T.red, color:T.white, fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>-{disc}%</span>}
+                  </div>
+                  {o.description && <div style={{ fontSize:12, color:T.inkSoft, marginBottom:6 }}>{o.description}</div>}
+                  <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+                    {o.original_price && <span style={{ fontSize:12, color:T.inkSoft, textDecoration:"line-through" }}>{o.original_price} ر.س</span>}
+                    <span style={{ fontSize:18, fontWeight:900, color:T.roseDp }}>{o.discounted_price} ر.س</span>
+                  </div>
+                  {o.valid_until && <div style={{ fontSize:11, color:T.inkSoft, marginTop:4 }}>⏰ صالح حتى: {o.valid_until}</div>}
+                </div>
+              </div>
+              <button onClick={() => bookOffer(o)}
+                style={{ width:"100%", padding:"10px", borderRadius:12, border:"none", background:T.roseDp, color:T.white, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                احجزي هذا العرض ←
+              </button>
+              <div style={{ textAlign:"center", fontSize:10, color:T.inkMuted, marginTop:6 }}>
+                🔒 يلزم تسجيل الدخول ودفع العربون للحجز
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function SalonDetailPage({ salon, setScreen, setSalon }) {
   const [services, setServices] = useState(salon?.services || [])
   const [loading, setLoading] = useState(false)
@@ -637,7 +700,10 @@ function SalonDetailPage({ salon, setScreen, setSalon }) {
         </Card>
 
         {/* Services */}
-        <div style={{ fontSize:15, fontWeight:800, color:T.ink, marginBottom:12 }}>
+        {/* عروض وباقات */}
+        <SalonOffers salonId={salon.id} setScreen={setScreen} setSalon={setSalon} salon={salon} />
+
+        <div style={{ fontSize:15, fontWeight:800, color:T.ink, marginBottom:12, marginTop:6 }}>
           الخدمات ({services.length})
         </div>
 
@@ -1337,6 +1403,7 @@ const OWN_TABS = [
   { id:"overview",  icon:"📊", label:"نظرة عامة" },
   { id:"bookings",  icon:"📅", label:"الحجوزات" },
   { id:"services",  icon:"✂️",  label:"الخدمات" },
+  { id:"offers",    icon:"🏷️",  label:"عروض" },
   { id:"inventory", icon:"🧴", label:"المخزون" },
   { id:"whatsapp",  icon:"💬", label:"بوت واتساب" },
   { id:"package",   icon:"📦", label:"باقتي" },
@@ -1424,6 +1491,7 @@ function OwnerDashboard({ setScreen }) {
         {tab === "whatsapp"  && <OwnerWhatsapp toast={toast} />}
         {tab === "settings"  && <OwnerSettings toast={toast} />}
         {tab === "package"   && <OwnerPackage toast={toast} />}
+        {tab === "offers"    && <OwnerOffers toast={toast} />}
       </div>
     </div>
   )
@@ -2385,6 +2453,164 @@ function OwnerServices({ toast }) {
 /* ══════════════════════════════════════════
    ⚙️ OWNER SETTINGS
 ══════════════════════════════════════════ */
+
+
+function OwnerOffers({ toast }) {
+  const [offers, setOffers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showAdd, setShowAdd] = useState(false)
+  const [salonId, setSalonId] = useState(null)
+  const [form, setForm] = useState({ type:"offer", title:"", description:"", original_price:"", discounted_price:"", valid_until:"" })
+  const [saving, setSaving] = useState(false)
+  const set = k => e => setForm(f => ({ ...f, [k]:e.target.value }))
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      const { data: salon } = await supabase.from('salons').select('id').eq('email', session.user.email)
+      if (!salon || !salon[0]) { setLoading(false); return }
+      setSalonId(salon[0].id)
+      const { data } = await supabase.from('offers').select('*').eq('salon_id', salon[0].id).order('created_at', { ascending:false })
+      setOffers(data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const addOffer = async () => {
+    if (!form.title || !form.discounted_price) { toast("⚠ أدخلي العنوان والسعر"); return }
+    if (!salonId) { toast("⚠ لم يتم التعرف على الصالون"); return }
+    setSaving(true)
+    const { data, error } = await supabase.from('offers').insert([{
+      salon_id: salonId,
+      type: form.type,
+      title: form.title,
+      description: form.description,
+      original_price: Number(form.original_price) || null,
+      discounted_price: Number(form.discounted_price),
+      valid_until: form.valid_until || null,
+      active: true,
+    }]).select()
+    setSaving(false)
+    if (error) { toast("⚠ " + error.message); return }
+    if (data) setOffers(o => [data[0], ...o])
+    setForm({ type:"offer", title:"", description:"", original_price:"", discounted_price:"", valid_until:"" })
+    setShowAdd(false)
+    toast("✅ تمت الإضافة!")
+  }
+
+  const deleteOffer = async (id) => {
+    await supabase.from('offers').delete().eq('id', id)
+    setOffers(o => o.filter(x => x.id !== id))
+    toast("🗑 تم الحذف")
+  }
+
+  const toggleOffer = async (id, active) => {
+    await supabase.from('offers').update({ active: !active }).eq('id', id)
+    setOffers(o => o.map(x => x.id === id ? { ...x, active:!active } : x))
+  }
+
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+        <div>
+          <div style={{ fontSize:16, fontWeight:800, color:T.ink }}>العروض والباقات</div>
+          <div style={{ fontSize:11, color:T.inkSoft }}>تظهر للعملاء في صفحة الصالون</div>
+        </div>
+        <PBtn sm onClick={() => setShowAdd(!showAdd)}>+ إضافة</PBtn>
+      </div>
+
+      {showAdd && (
+        <Card style={{ padding:16, marginBottom:14, border:`2px solid ${T.roseL}` }}>
+          <div style={{ fontSize:13, fontWeight:800, color:T.ink, marginBottom:12 }}>إضافة عرض أو باقة</div>
+          
+          {/* نوع */}
+          <div style={{ display:"flex", gap:8, marginBottom:14 }}>
+            {[{ id:"offer", label:"🏷️ عرض خاص" }, { id:"package", label:"📦 باقة" }].map(t => (
+              <button key={t.id} onClick={() => setForm(f => ({ ...f, type:t.id }))}
+                style={{ flex:1, padding:"10px", borderRadius:12, border:`2px solid ${form.type===t.id ? T.roseDp : T.creamDk}`, background:form.type===t.id ? T.roseL : T.white, color:form.type===t.id ? T.roseDp : T.inkSoft, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ marginBottom:10 }}>
+            <label style={{ fontSize:12, color:T.inkSoft, display:"block", marginBottom:5 }}>العنوان *</label>
+            <input value={form.title} onChange={set("title")} placeholder={form.type==="offer" ? "مثال: خصم 30% على الصبغ" : "مثال: باقة العروس"}
+              style={{ width:"100%", padding:"10px 12px", border:`1.5px solid ${T.creamDk}`, borderRadius:10, fontSize:13, color:T.ink, background:T.cream, outline:"none", fontFamily:"Tajawal,sans-serif" }} />
+          </div>
+
+          <div style={{ marginBottom:10 }}>
+            <label style={{ fontSize:12, color:T.inkSoft, display:"block", marginBottom:5 }}>الوصف</label>
+            <textarea value={form.description} onChange={set("description")} placeholder="تفاصيل العرض أو الباقة..." rows={2}
+              style={{ width:"100%", padding:"10px 12px", border:`1.5px solid ${T.creamDk}`, borderRadius:10, fontSize:13, color:T.ink, background:T.cream, outline:"none", fontFamily:"Tajawal,sans-serif", resize:"none" }} />
+          </div>
+
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+            <div>
+              <label style={{ fontSize:12, color:T.inkSoft, display:"block", marginBottom:5 }}>السعر الأصلي (ر.س)</label>
+              <input type="number" value={form.original_price} onChange={set("original_price")} placeholder="500"
+                style={{ width:"100%", padding:"10px 12px", border:`1.5px solid ${T.creamDk}`, borderRadius:10, fontSize:13, color:T.ink, background:T.cream, outline:"none", fontFamily:"Tajawal,sans-serif" }} />
+            </div>
+            <div>
+              <label style={{ fontSize:12, color:T.inkSoft, display:"block", marginBottom:5 }}>السعر بعد الخصم *</label>
+              <input type="number" value={form.discounted_price} onChange={set("discounted_price")} placeholder="350"
+                style={{ width:"100%", padding:"10px 12px", border:`1.5px solid ${T.creamDk}`, borderRadius:10, fontSize:13, color:T.ink, background:T.cream, outline:"none", fontFamily:"Tajawal,sans-serif" }} />
+            </div>
+          </div>
+
+          <div style={{ marginBottom:14 }}>
+            <label style={{ fontSize:12, color:T.inkSoft, display:"block", marginBottom:5 }}>صالح حتى (اختياري)</label>
+            <input type="date" value={form.valid_until} onChange={set("valid_until")}
+              style={{ width:"100%", padding:"10px 12px", border:`1.5px solid ${T.creamDk}`, borderRadius:10, fontSize:13, color:T.ink, background:T.cream, outline:"none", fontFamily:"Tajawal,sans-serif" }} />
+          </div>
+
+          <div style={{ display:"flex", gap:8 }}>
+            <OBtn onClick={() => setShowAdd(false)}>إلغاء</OBtn>
+            <div style={{ flex:1 }}><PBtn full disabled={saving} onClick={addOffer}>{saving ? "...جاري الحفظ" : "✓ إضافة"}</PBtn></div>
+          </div>
+        </Card>
+      )}
+
+      {loading && <div style={{ textAlign:"center", padding:30, color:T.inkSoft }}>...جاري التحميل</div>}
+      {!loading && offers.length === 0 && <Empty icon="🏷️" title="لا توجد عروض بعد" desc="أضيفي عرضاً أو باقة لجذب العملاء" />}
+
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        {offers.map(o => {
+          const disc = o.original_price ? Math.round((1 - o.discounted_price/o.original_price)*100) : 0
+          return (
+            <Card key={o.id} style={{ padding:14, opacity:o.active ? 1 : .6 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
+                    <span style={{ fontSize:13 }}>{o.type==="package" ? "📦" : "🏷️"}</span>
+                    <div style={{ fontSize:14, fontWeight:800, color:T.ink }}>{o.title}</div>
+                    {disc > 0 && <span style={{ background:T.redL, color:T.red, fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>-{disc}%</span>}
+                  </div>
+                  {o.description && <div style={{ fontSize:12, color:T.inkSoft, marginBottom:6 }}>{o.description}</div>}
+                  <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+                    {o.original_price && <span style={{ fontSize:12, color:T.inkSoft, textDecoration:"line-through" }}>{o.original_price} ر.س</span>}
+                    <span style={{ fontSize:16, fontWeight:900, color:T.roseDp }}>{o.discounted_price} ر.س</span>
+                  </div>
+                  {o.valid_until && <div style={{ fontSize:11, color:T.inkSoft, marginTop:4 }}>📅 صالح حتى: {o.valid_until}</div>}
+                </div>
+                <div style={{ display:"flex", gap:6 }}>
+                  <button onClick={() => toggleOffer(o.id, o.active)}
+                    style={{ padding:"4px 10px", borderRadius:20, border:`1px solid ${o.active ? T.green : T.creamDk}`, background:o.active ? T.greenL : T.cream, color:o.active ? T.green : T.inkSoft, fontSize:10, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    {o.active ? "✓ فعّال" : "متوقف"}
+                  </button>
+                  <button onClick={() => deleteOffer(o.id)}
+                    style={{ width:26, height:26, borderRadius:"50%", border:`1px solid ${T.redL}`, background:T.white, color:T.red, fontSize:12, cursor:"pointer" }}>✕</button>
+                </div>
+              </div>
+            </Card>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 function OwnerPackage({ toast }) {
   const [currentPkg, setCurrentPkg] = useState("pro")
