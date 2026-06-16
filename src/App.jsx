@@ -1423,6 +1423,79 @@ function OwnerBookings() {
   )
 }
 
+
+function OwnerRecentBookings({ stats }) {
+  const [bookings, setBookings] = useState([])
+  const [selected, setSelected] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      const { data: salon } = await supabase.from('salons').select('id').eq('email', session.user.email)
+      if (!salon || !salon[0]) { setLoading(false); return }
+      const { data } = await supabase.from('bookings').select('*').eq('salon_id', salon[0].id).order('created_at', { ascending:false }).limit(10)
+      setBookings(data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  if (loading) return <div style={{ textAlign:"center", padding:20, color:T.inkSoft }}>...</div>
+  if (bookings.length === 0) return <Empty icon="📅" title="لا توجد حجوزات حتى الآن" desc="ستظهر هنا فور بدء الاستقبال" />
+
+  const STATUS = {
+    pending:   { label:"انتظار", color:T.gold, bg:T.goldPale },
+    confirmed: { label:"مؤكد",   color:T.green, bg:T.greenL },
+    completed: { label:"مكتمل", color:T.inkSoft, bg:T.creamDk },
+    cancelled: { label:"ملغي",  color:T.red, bg:T.redL },
+  }
+
+  return (
+    <div>
+      <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+        {bookings.map(bk => {
+          const st = STATUS[bk.status] || STATUS.pending
+          return (
+            <div key={bk.id}>
+              <div onClick={() => setSelected(selected===bk.id ? null : bk.id)}
+                style={{ background:T.cream, borderRadius:10, padding:"10px 14px", cursor:"pointer", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{bk.client_name}</div>
+                  <div style={{ fontSize:11, color:T.inkSoft }}>{bk.appointment_date} · {bk.appointment_time}</div>
+                </div>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ background:st.bg, color:st.color, fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>{st.label}</span>
+                  <span style={{ fontSize:11, color:T.inkMuted }}>{selected===bk.id ? "▲" : "▼"}</span>
+                </div>
+              </div>
+              {selected === bk.id && (
+                <div style={{ background:T.white, borderRadius:10, padding:"12px 14px", marginTop:4, border:`1px solid ${T.creamDk}` }}>
+                  {[
+                    ["👤 العميلة", bk.client_name],
+                    ["📞 الجوال", bk.client_phone],
+                    ["📅 التاريخ", bk.appointment_date],
+                    ["⏰ الوقت", bk.appointment_time],
+                    ["💰 المبلغ الكامل", (bk.total_amount||0) + " ر.س"],
+                    ["🔒 العربون", (bk.deposit_amount||0) + " ر.س"],
+                    ["📊 الحالة", STATUS[bk.status]?.label || bk.status],
+                  ].map(r => (
+                    <div key={r[0]} style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"5px 0", borderBottom:`1px solid ${T.creamDk}` }}>
+                      <span style={{ color:T.inkSoft }}>{r[0]}</span>
+                      <span style={{ color:T.ink, fontWeight:600 }}>{r[1]}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function OwnerOverview() {
   const MONTHS = ["يناير","فبراير","مارس","أبريل","مايو","يونيو"]
   const BARS = [70,85,60,90,75,100]
@@ -1479,7 +1552,7 @@ function OwnerOverview() {
           <div style={{ fontSize:14, fontWeight:800, color:T.ink }}>آخر الحجوزات</div>
           <span style={{ fontSize:10, background:T.roseL, color:T.roseDp, padding:"3px 10px", borderRadius:20, fontWeight:700 }}>🔴 مباشر</span>
         </div>
-        <Empty icon="📅" title="لا توجد حجوزات حتى الآن" desc="ستظهر هنا فور بدء الاستقبال" />
+        <OwnerRecentBookings stats={ownerStats} />
       </Card>
     </div>
   )
@@ -1803,8 +1876,22 @@ function OwnerServices({ toast }) {
   ])
   const [showAdd, setShowAdd] = useState(false)
   const [editId, setEditId] = useState(null)
+  const [editSvc, setEditSvc] = useState(null)
   const [newSvc, setNewSvc] = useState({ name:"", price:"", duration:60, days:["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس"], timeFrom:"09:00", timeTo:"18:00" })
   const [focusF, setFocusF] = useState(null)
+
+  const startEdit = (sv) => {
+    setEditId(sv.id)
+    setEditSvc({ name:sv.name, price:sv.price, duration:sv.duration, days:sv.days, timeFrom:sv.timeFrom, timeTo:sv.timeTo })
+  }
+
+  const saveEdit = () => {
+    if (!editSvc.name || !editSvc.price) { toast("⚠ أدخلي اسم الخدمة والسعر"); return }
+    setServices(s => s.map(sv => sv.id === editId ? { ...sv, ...editSvc, price:Number(editSvc.price) } : sv))
+    setEditId(null)
+    setEditSvc(null)
+    toast("✅ تم تعديل الخدمة!")
+  }
 
   const inp = (k) => ({
     padding:"10px 12px", border:`1.5px solid ${focusF===k ? T.rose : T.creamDk}`,
@@ -1972,6 +2059,10 @@ function OwnerServices({ toast }) {
                   style={{ padding:"5px 10px", borderRadius:20, border:`1px solid ${sv.active ? T.green : T.creamDk}`, background:sv.active ? T.greenL : T.cream, color:sv.active ? T.green : T.inkSoft, fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
                   {sv.active ? "✓ فعّالة" : "متوقفة"}
                 </button>
+                <button onClick={() => startEdit(sv)}
+                  style={{ width:30, height:30, borderRadius:"50%", border:`1px solid ${T.goldL}`, background:T.goldPale, color:T.gold, fontSize:14, cursor:"pointer" }}>
+                  ✏
+                </button>
                 <button onClick={() => deleteService(sv.id)}
                   style={{ width:30, height:30, borderRadius:"50%", border:`1px solid ${T.redL}`, background:T.white, color:T.red, fontSize:14, cursor:"pointer" }}>
                   ✕
@@ -1997,6 +2088,62 @@ function OwnerServices({ toast }) {
                 ))}
               </div>
             </div>
+
+            {/* نموذج التعديل */}
+            {editId === sv.id && editSvc && (
+              <div style={{ marginTop:12, background:T.roseL, borderRadius:12, padding:"14px" }}>
+                <div style={{ fontSize:13, fontWeight:800, color:T.roseDp, marginBottom:10 }}>✏ تعديل الخدمة</div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+                  <div>
+                    <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:4 }}>اسم الخدمة</label>
+                    <input value={editSvc.name} onChange={e => setEditSvc(s => ({ ...s, name:e.target.value }))}
+                      style={{ width:"100%", padding:"9px 12px", border:`1.5px solid ${T.rose}`, borderRadius:8, fontSize:13, color:T.ink, background:T.white, outline:"none", fontFamily:"Tajawal,sans-serif" }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:4 }}>السعر (ر.س)</label>
+                    <input type="number" value={editSvc.price} onChange={e => setEditSvc(s => ({ ...s, price:e.target.value }))}
+                      style={{ width:"100%", padding:"9px 12px", border:`1.5px solid ${T.rose}`, borderRadius:8, fontSize:13, color:T.ink, background:T.white, outline:"none", fontFamily:"Tajawal,sans-serif" }} />
+                  </div>
+                </div>
+                <div style={{ marginBottom:10 }}>
+                  <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:6 }}>الأيام</label>
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
+                    {DAYS.map(d => (
+                      <button key={d} onClick={() => setEditSvc(s => ({ ...s, days: s.days.includes(d) ? s.days.filter(x => x!==d) : [...s.days, d] }))}
+                        style={{ padding:"4px 10px", borderRadius:20, border:`1.5px solid ${editSvc.days.includes(d) ? T.roseDp : T.creamDk}`, background:editSvc.days.includes(d) ? T.white : "transparent", color:editSvc.days.includes(d) ? T.roseDp : T.inkSoft, fontSize:11, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
+                  <div>
+                    <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:4 }}>من</label>
+                    <select value={editSvc.timeFrom} onChange={e => setEditSvc(s => ({ ...s, timeFrom:e.target.value }))}
+                      style={{ width:"100%", padding:"9px 12px", border:`1.5px solid ${T.rose}`, borderRadius:8, fontSize:13, color:T.ink, background:T.white, outline:"none", fontFamily:"Tajawal,sans-serif" }}>
+                      {ALL_TIMES.map(t => <option key={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:4 }}>إلى</label>
+                    <select value={editSvc.timeTo} onChange={e => setEditSvc(s => ({ ...s, timeTo:e.target.value }))}
+                      style={{ width:"100%", padding:"9px 12px", border:`1.5px solid ${T.rose}`, borderRadius:8, fontSize:13, color:T.ink, background:T.white, outline:"none", fontFamily:"Tajawal,sans-serif" }}>
+                      {ALL_TIMES.map(t => <option key={t}>{t}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={() => { setEditId(null); setEditSvc(null) }}
+                    style={{ flex:1, padding:"9px", borderRadius:10, border:`1px solid ${T.creamDk}`, background:T.white, color:T.inkSoft, fontSize:12, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    إلغاء
+                  </button>
+                  <button onClick={saveEdit}
+                    style={{ flex:2, padding:"9px", borderRadius:10, border:"none", background:T.roseDp, color:T.white, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    ✓ حفظ التعديل
+                  </button>
+                </div>
+              </div>
+            )}
           </Card>
         ))}
       </div>
