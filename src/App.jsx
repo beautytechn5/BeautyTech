@@ -565,8 +565,10 @@ function ClientHome({ setScreen, setSalon }) {
         <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
           {list.map(s => (
             <Card key={s.id} style={{ overflow:"hidden" }}>
-              <div style={{ height:90, background:`linear-gradient(135deg,${T.roseL},${T.goldPale})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:40, position:"relative" }}>
-                {s.emoji}
+              <div style={{ height:90, background:`linear-gradient(135deg,${T.roseL},${T.goldPale})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:40, position:"relative", overflow:"hidden" }}>
+                {s.imageUrl
+                  ? <img src={s.imageUrl} alt={s.name} style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover" }} />
+                  : <span>{s.emoji}</span>}
 
                 {s.availNow && (
                   <div style={{ position:"absolute", top:10, left:12, background:T.greenL, color:T.green, fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20, display:"flex", alignItems:"center", gap:4 }}>
