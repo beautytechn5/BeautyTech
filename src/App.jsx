@@ -531,13 +531,17 @@ function ClientHome({ setScreen, setSalon }) {
                   </div>
                 </div>
                 {/* Actions */}
-                <div style={{ display:"flex", gap:8 }}>
+                <div style={{ display:"flex", gap:8, marginBottom:8 }}>
                   <PBtn full onClick={() => { setSalon(s); setScreen("booking") }}>احجزي الآن</PBtn>
-                  <a href={"https://wa.me/966" + s.wa.slice(1)} target="_blank" rel="noreferrer"
+                  <a href={"https://wa.me/966" + (s.wa||"0500000000").replace(/^0/,"")} target="_blank" rel="noreferrer"
                     style={{ width:46, height:46, borderRadius:12, background:T.waL, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, textDecoration:"none", flexShrink:0 }}>💬</a>
                   <button onClick={() => { if (s.mapUrl) window.open(s.mapUrl, "_blank"); else alert("الصالون لم يضف موقعه بعد") }}
                     style={{ width:46, height:46, borderRadius:12, background:T.goldPale, border:"none", fontSize:20, cursor:"pointer", flexShrink:0 }}>📍</button>
                 </div>
+                <button onClick={() => { setSalon(s); setScreen("salon-detail") }}
+                  style={{ width:"100%", padding:"9px", borderRadius:12, border:`1px solid ${T.creamDk}`, background:T.cream, color:T.inkSoft, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                  عرض كل الخدمات ({s.services?.length || 0}) ←
+                </button>
               </div>
             </Card>
           ))}
@@ -572,6 +576,101 @@ function ClientHome({ setScreen, setSalon }) {
           حجوزات إلكترونية · عربون آلي · بوت واتساب<br />رسوم تأسيس 600 ر.س مرة واحدة
         </div>
         <PBtn gold onClick={() => setScreen("owner-register")}>ابدأي الآن ←</PBtn>
+      </div>
+    </div>
+  )
+}
+
+
+/* ══════════════════════════════════════════
+   🏪 SALON DETAIL PAGE
+══════════════════════════════════════════ */
+function SalonDetailPage({ salon, setScreen, setSalon }) {
+  const [services, setServices] = useState(salon?.services || [])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!salon?.id) return
+    setLoading(true)
+    supabase.from('services').select('*').eq('salon_id', salon.id).eq('active', true).then(({ data }) => {
+      if (data) setServices(data.map(s => ({ n:s.name, p:s.price, dur:s.duration, timeFrom:s.time_from, timeTo:s.time_to })))
+      setLoading(false)
+    })
+  }, [salon?.id])
+
+  if (!salon) return null
+
+  return (
+    <div style={{ background:T.cream, minHeight:"100vh", paddingBottom:40 }}>
+      <div style={{ background:T.white, borderBottom:`1px solid ${T.roseL}`, padding:"14px 20px", display:"flex", alignItems:"center", gap:12, position:"sticky", top:0, zIndex:100 }}>
+        <button onClick={() => setScreen("client-home")} style={{ width:36, height:36, borderRadius:"50%", border:"none", background:T.cream, cursor:"pointer", fontSize:16 }}>←</button>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:15, fontWeight:800, color:T.ink }}>{salon.name}</div>
+          <div style={{ fontSize:11, color:T.inkSoft }}>📍 {salon.city}</div>
+        </div>
+        <a href={"https://wa.me/966" + (salon.wa||"").replace(/^0/,"")} target="_blank" rel="noreferrer"
+          style={{ width:38, height:38, borderRadius:"50%", background:T.waL, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, textDecoration:"none" }}>💬</a>
+      </div>
+
+      {/* Hero */}
+      <div style={{ height:140, background:`linear-gradient(135deg,${T.roseL},${T.goldPale})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:60 }}>
+        💅
+      </div>
+
+      <div style={{ padding:"16px 18px" }}>
+        {/* Info */}
+        <Card style={{ padding:16, marginBottom:14 }}>
+          <div style={{ fontSize:17, fontWeight:900, color:T.ink, marginBottom:6 }}>{salon.name}</div>
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+            <span style={{ color:T.gold, fontSize:14, fontWeight:700 }}>★★★★★</span>
+            <span style={{ fontSize:12, color:T.inkSoft }}>📍 {salon.city}</span>
+          </div>
+          {salon.tags && salon.tags[0] && (
+            <p style={{ fontSize:13, color:T.inkSoft, lineHeight:1.7 }}>{salon.tags[0]}</p>
+          )}
+          {salon.mapUrl && (
+            <button onClick={() => window.open(salon.mapUrl, "_blank")}
+              style={{ marginTop:10, padding:"8px 16px", borderRadius:20, border:`1px solid ${T.goldL}`, background:T.goldPale, color:T.gold, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+              📍 عرض الموقع على الخريطة
+            </button>
+          )}
+        </Card>
+
+        {/* Services */}
+        <div style={{ fontSize:15, fontWeight:800, color:T.ink, marginBottom:12 }}>
+          الخدمات ({services.length})
+        </div>
+
+        {loading && <div style={{ textAlign:"center", padding:20, color:T.inkSoft }}>...جاري التحميل</div>}
+
+        {!loading && services.length === 0 && (
+          <div style={{ textAlign:"center", padding:30, color:T.inkSoft, background:T.white, borderRadius:14 }}>
+            لم يتم إضافة خدمات بعد
+          </div>
+        )}
+
+        <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:16 }}>
+          {services.map((sv, i) => (
+            <Card key={i} style={{ padding:"14px 16px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div>
+                <div style={{ fontSize:14, fontWeight:700, color:T.ink }}>{sv.n}</div>
+                <div style={{ fontSize:12, color:T.inkSoft, marginTop:3 }}>
+                  ⏱ {sv.dur < 60 ? sv.dur+"د" : Math.floor(sv.dur/60)+"س"+(sv.dur%60>0?sv.dur%60+"د":"")}
+                  {sv.timeFrom && ` · ${sv.timeFrom}—${sv.timeTo}`}
+                </div>
+                <div style={{ fontSize:11, color:T.green, marginTop:2 }}>🔒 عربون: {Math.round(sv.p*.3)} ر.س</div>
+              </div>
+              <div style={{ textAlign:"left" }}>
+                <div style={{ fontSize:18, fontWeight:900, color:T.gold }}>{sv.p}</div>
+                <div style={{ fontSize:10, color:T.inkSoft }}>ر.س</div>
+              </div>
+            </Card>
+          ))}
+        </div>
+
+        <PBtn full onClick={() => { setSalon(salon); setScreen("booking") }}>
+          احجزي الآن ←
+        </PBtn>
       </div>
     </div>
   )
@@ -2082,10 +2181,10 @@ function OwnerServices({ toast }) {
           <div style={{ marginBottom:14 }}>
             <label style={{ fontSize:12, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:8 }}>مدة الخدمة</label>
             <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-              {[30,45,60,90,120,150,180].map(d => (
+              {[30,45,60,90,120,150,180,240,300,360,420,480,540,600].map(d => (
                 <button key={d} onClick={() => setNewSvc(s => ({ ...s, duration:d }))}
                   style={{ padding:"7px 14px", borderRadius:20, border:`1.5px solid ${newSvc.duration===d ? T.roseDp : T.creamDk}`, background:newSvc.duration===d ? T.roseL : T.white, color:newSvc.duration===d ? T.roseDp : T.ink, fontSize:12, fontWeight:newSvc.duration===d ? 700 : 400, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
-                  {d < 60 ? d+"د" : (d/60)+"س"}
+                  {d < 60 ? d+"د" : d%60===0 ? (d/60)+"س" : Math.floor(d/60)+"س"+d%60+"د"}
                 </button>
               ))}
             </div>
@@ -3675,6 +3774,7 @@ export default function App() {
     if (screen === "client-login")    return <ClientLogin setScreen={go} />
     if (screen === "client-register") return <ClientRegister setScreen={go} />
     if (screen === "booking")         return <BookingPage salon={salon} setScreen={go} />
+    if (screen === "salon-detail")     return <SalonDetailPage salon={salon} setScreen={go} setSalon={setSalon} />
     if (screen === "owner-register")  return <OwnerRegister setScreen={go} />
     if (screen === "owner-login")     return <OwnerLogin setScreen={go} />
     if (screen === "owner-dashboard") return <OwnerDashboard setScreen={go} />
