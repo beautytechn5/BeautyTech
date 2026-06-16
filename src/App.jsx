@@ -1500,6 +1500,8 @@ function OwnerOverview() {
   const MONTHS = ["يناير","فبراير","مارس","أبريل","مايو","يونيو"]
   const BARS = [70,85,60,90,75,100]
   const [ownerStats, setOwnerStats] = useState({ revenue:0, todayBookings:0, totalBookings:0, clients:0 })
+  const [detailModal, setDetailModal] = useState(null)
+  const [allBookings, setAllBookings] = useState([])
 
   useEffect(() => {
     const load = async () => {
@@ -1515,24 +1517,82 @@ function OwnerOverview() {
         const revenue = bookings.filter(b => b.status === 'completed').reduce((s, b) => s + (b.total_amount || 0), 0)
         const clients = new Set(bookings.map(b => b.client_phone)).size
         setOwnerStats({ revenue, todayBookings: todayB, totalBookings: bookings.length, clients })
+        setAllBookings(bookings)
       }
     }
     load()
   }, [])
 
+  const today = new Date().toISOString().split('T')[0]
+
+  // Modal للتفاصيل
+  const renderDetailModal = () => {
+    if (!detailModal) return null
+    let title = "", items = []
+    if (detailModal === "revenue") {
+      title = "💰 تفاصيل الإيرادات"
+      const completed = allBookings.filter(b => b.status === "completed")
+      items = completed.map(b => ({ label: b.client_name || "عميلة", value: (b.total_amount||0) + " ر.س", sub: b.appointment_date }))
+      if (items.length === 0) items = [{ label:"لا توجد إيرادات بعد", value:"", sub:"" }]
+    } else if (detailModal === "today") {
+      title = "📅 حجوزات اليوم"
+      const tod = allBookings.filter(b => b.appointment_date === today)
+      items = tod.map(b => ({ label: b.client_name || "عميلة", value: b.appointment_time, sub: b.status === "completed" ? "مكتمل" : b.status === "cancelled" ? "ملغي" : "قيد الانتظار" }))
+      if (items.length === 0) items = [{ label:"لا توجد حجوزات اليوم", value:"", sub:"" }]
+    } else if (detailModal === "all") {
+      title = "📊 كل الحجوزات"
+      items = allBookings.map(b => ({ label: b.client_name || "عميلة", value: (b.total_amount||0) + " ر.س", sub: b.appointment_date + " · " + (b.status === "completed" ? "مكتمل" : b.status === "cancelled" ? "ملغي" : "انتظار") }))
+      if (items.length === 0) items = [{ label:"لا توجد حجوزات", value:"", sub:"" }]
+    } else if (detailModal === "clients") {
+      title = "👤 العملاء"
+      const unique = [...new Set(allBookings.map(b => b.client_phone))]
+      items = unique.map(phone => {
+        const bks = allBookings.filter(b => b.client_phone === phone)
+        return { label: bks[0]?.client_name || "عميلة", value: bks.length + " حجز", sub: phone }
+      })
+      if (items.length === 0) items = [{ label:"لا يوجد عملاء بعد", value:"", sub:"" }]
+    }
+    return (
+      <div onClick={() => setDetailModal(null)} style={{ position:"fixed", inset:0, background:"rgba(44,32,24,.5)", zIndex:3000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+        <div onClick={e => e.stopPropagation()} style={{ background:T.white, borderRadius:"24px 24px 0 0", width:"100%", maxWidth:560, maxHeight:"80vh", overflow:"hidden", display:"flex", flexDirection:"column" }}>
+          <div style={{ padding:"16px 20px", borderBottom:`1px solid ${T.creamDk}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <div style={{ fontSize:16, fontWeight:800, color:T.ink }}>{title}</div>
+            <button onClick={() => setDetailModal(null)} style={{ width:30, height:30, borderRadius:"50%", border:"none", background:T.cream, cursor:"pointer", fontSize:14 }}>✕</button>
+          </div>
+          <div style={{ overflowY:"auto", padding:"14px 20px", flex:1 }}>
+            {items.map((it, i) => (
+              <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:`1px solid ${T.creamDk}` }}>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{it.label}</div>
+                  {it.sub && <div style={{ fontSize:11, color:T.inkSoft, marginTop:2 }}>{it.sub}</div>}
+                </div>
+                {it.value && <div style={{ fontSize:14, fontWeight:800, color:T.roseDp }}>{it.value}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div>
+      {renderDetailModal()}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
         {[
-          { l:"إيرادات الشهر", v: ownerStats.revenue + " ر.س", s: ownerStats.revenue > 0 ? "من الحجوزات" : "لا توجد بيانات", gold:true },
-          { l:"حجوزات اليوم",  v: ownerStats.todayBookings, s: ownerStats.todayBookings > 0 ? "حجز اليوم" : "لا توجد حجوزات" },
-          { l:"إجمالي الحجوزات", v: ownerStats.totalBookings, s:"كل الحجوزات" },
-          { l:"عملاء",    v: ownerStats.clients, s:"مسجلين" },
+          { l:"إيرادات الشهر", v: ownerStats.revenue + " ر.س", s: ownerStats.revenue > 0 ? "من الحجوزات" : "لا توجد بيانات", gold:true, modal:"revenue" },
+          { l:"حجوزات اليوم",  v: ownerStats.todayBookings, s: ownerStats.todayBookings > 0 ? "حجز اليوم" : "لا توجد حجوزات", modal:"today" },
+          { l:"إجمالي الحجوزات", v: ownerStats.totalBookings, s:"كل الحجوزات", modal:"all" },
+          { l:"عملاء",    v: ownerStats.clients, s:"مسجلين", modal:"clients" },
         ].map(st => (
-          <Card key={st.l} style={{ padding:14, background:st.gold ? `linear-gradient(135deg,${T.gold},${T.gold2})` : T.white }}>
+          <Card key={st.l} onClick={() => setDetailModal(st.modal)}
+            style={{ padding:14, background:st.gold ? `linear-gradient(135deg,${T.gold},${T.gold2})` : T.white, cursor:"pointer", transition:"transform .2s" }}
+            onMouseOver={e => e.currentTarget.style.transform="scale(1.02)"}
+            onMouseOut={e => e.currentTarget.style.transform="scale(1)"}>
             <div style={{ fontSize:11, color:st.gold ? "rgba(255,255,255,.8)" : T.inkSoft, marginBottom:5, fontWeight:600 }}>{st.l}</div>
             <div style={{ fontSize:24, fontWeight:900, color:st.gold ? T.white : T.ink }}>{st.v}</div>
             <div style={{ fontSize:11, color:st.gold ? "rgba(255,255,255,.7)" : T.rose, marginTop:3 }}>{st.s}</div>
+            <div style={{ fontSize:10, color:st.gold ? "rgba(255,255,255,.5)" : T.inkMuted, marginTop:4 }}>← اضغط للتفاصيل</div>
           </Card>
         ))}
       </div>
@@ -1566,6 +1626,7 @@ function OwnerInventory({ toast }) {
     { id:4, n:"كريم مرطب شعر", pct:88, total:500, used:60, unit:"مل", alert:false },
   ])
   const [showAdd, setShowAdd] = useState(false)
+  const [editItemId, setEditItemId] = useState(null)
   const [newItem, setNewItem] = useState({ n:"", total:"", unit:"مل" })
   const [focusF, setFocusF] = useState(null)
 
@@ -1637,8 +1698,12 @@ function OwnerInventory({ toast }) {
           <Card key={item.id} style={{ padding:14 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
               <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{item.n}</div>
-              <button onClick={() => setItems(i => i.filter(x => x.id !== item.id))}
-                style={{ width:24, height:24, borderRadius:"50%", border:`1px solid ${T.redL}`, background:T.white, color:T.red, fontSize:12, cursor:"pointer" }}>✕</button>
+              <div style={{ display:"flex", gap:4 }}>
+                <button onClick={() => setEditItemId(item.id === editItemId ? null : item.id)}
+                  style={{ width:24, height:24, borderRadius:"50%", border:`1px solid ${T.goldL}`, background:T.goldPale, color:T.gold, fontSize:12, cursor:"pointer" }}>✏</button>
+                <button onClick={() => setItems(i => i.filter(x => x.id !== item.id))}
+                  style={{ width:24, height:24, borderRadius:"50%", border:`1px solid ${T.redL}`, background:T.white, color:T.red, fontSize:12, cursor:"pointer" }}>✕</button>
+              </div>
             </div>
             <div style={{ background:T.creamDk, borderRadius:4, height:6, overflow:"hidden", margin:"8px 0" }}>
               <div style={{ height:"100%", borderRadius:4, width:item.pct + "%", background:item.alert ? `linear-gradient(90deg,#E87070,${T.red})` : `linear-gradient(90deg,${T.rose},${T.roseDp})` }} />
@@ -1657,6 +1722,23 @@ function OwnerInventory({ toast }) {
                 </button>
               ))}
             </div>
+            {editItemId === item.id && (
+              <div style={{ marginTop:10, background:T.goldPale, borderRadius:10, padding:"12px", border:`1px solid ${T.goldL}` }}>
+                <div style={{ fontSize:12, fontWeight:700, color:T.ink, marginBottom:8 }}>✏ تعديل المنتج</div>
+                <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:8, marginBottom:8 }}>
+                  <input value={item.n} onChange={e => setItems(i => i.map(x => x.id === item.id ? { ...x, n:e.target.value } : x))}
+                    placeholder="اسم المنتج"
+                    style={{ padding:"8px 10px", border:`1.5px solid ${T.gold}`, borderRadius:8, fontSize:13, color:T.ink, background:T.white, outline:"none", fontFamily:"Tajawal,sans-serif" }} />
+                  <input type="number" value={item.total} onChange={e => setItems(i => i.map(x => x.id === item.id ? { ...x, total:Number(e.target.value) } : x))}
+                    placeholder="الكمية"
+                    style={{ padding:"8px 10px", border:`1.5px solid ${T.gold}`, borderRadius:8, fontSize:13, color:T.ink, background:T.white, outline:"none", fontFamily:"Tajawal,sans-serif" }} />
+                </div>
+                <button onClick={() => { setEditItemId(null); toast("✅ تم تعديل المنتج") }}
+                  style={{ width:"100%", padding:"8px", borderRadius:8, border:"none", background:T.gold, color:T.white, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                  ✓ حفظ التعديل
+                </button>
+              </div>
+            )}
           </Card>
         ))}
       </div>
