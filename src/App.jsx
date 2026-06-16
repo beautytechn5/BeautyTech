@@ -1812,7 +1812,121 @@ function OwnerDashboard({ setScreen }) {
 }
 
 
+function OwnerBookings() {
+  const [bookings, setBookings] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState("active")
+  const toast = useToast()
 
+  useEffect(() => {
+    const load = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      // جلب بيانات الصالون أولاً
+      const { data: salonData } = await supabase.from('salons').select('id').eq('email', session.user.email)
+      if (!salonData || salonData.length === 0) { setLoading(false); return }
+      const salonId = salonData[0].id
+      const { data } = await supabase.from('bookings')
+        .select('*')
+        .eq('salon_id', salonId)
+        .order('appointment_date', { ascending: true })
+      setBookings(data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const updateStatus = async (id, status) => {
+    await supabase.from('bookings').update({ status }).eq('id', id)
+    setBookings(b => b.map(bk => bk.id === id ? { ...bk, status } : bk))
+    toast(status === "completed" ? "✅ تم تحديد الحجز كمكتمل" : "تم إلغاء الحجز")
+  }
+
+  const filtered = bookings.filter(b => {
+    if (tab === "active")    return b.status === "pending" || b.status === "confirmed"
+    if (tab === "done")      return b.status === "completed"
+    if (tab === "cancelled") return b.status === "cancelled"
+    return true
+  })
+
+  const STATUS = {
+    pending:   { label:"قيد الانتظار", color:T.gold,    bg:T.goldPale },
+    confirmed: { label:"مؤكد",         color:T.green,   bg:T.greenL },
+    completed: { label:"مكتمل",        color:T.inkSoft, bg:T.creamDk },
+    cancelled: { label:"ملغي",         color:T.red,     bg:T.redL },
+  }
+
+  return (
+    <div>
+      <div style={{ display:"flex", background:T.white, borderRadius:12, overflow:"hidden", marginBottom:14, border:`1px solid ${T.creamDk}` }}>
+        {[
+          { id:"active",    label:"الفعّالة",  icon:"🟢", count: bookings.filter(b => b.status==="pending"||b.status==="confirmed").length },
+          { id:"done",      label:"المكتملة",  icon:"✅", count: bookings.filter(b => b.status==="completed").length },
+          { id:"cancelled", label:"الملغية",   icon:"❌", count: bookings.filter(b => b.status==="cancelled").length },
+        ].map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            style={{ flex:1, padding:"10px 8px", border:"none", borderBottom:`3px solid ${tab===t.id ? T.roseDp : "transparent"}`, background:"transparent", cursor:"pointer", fontSize:11, fontWeight:tab===t.id ? 700 : 400, color:tab===t.id ? T.roseDp : T.inkSoft, fontFamily:"Tajawal,sans-serif" }}>
+            {t.icon} {t.label} {t.count > 0 && <span style={{ background:tab===t.id?T.roseDp:T.creamDk, color:tab===t.id?T.white:T.inkSoft, borderRadius:"50%", padding:"1px 6px", fontSize:10, marginRight:3 }}>{t.count}</span>}
+          </button>
+        ))}
+      </div>
+
+      {loading && <div style={{ textAlign:"center", padding:40, color:T.inkSoft }}>...جاري التحميل</div>}
+      {!loading && filtered.length === 0 && <Empty icon="📅" title="لا توجد حجوزات" desc="ستظهر هنا فور بدء الاستقبال" />}
+
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        {filtered.map(bk => {
+          const st = STATUS[bk.status] || STATUS.pending
+          return (
+            <Card key={bk.id} style={{ padding:14 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                <div style={{ fontSize:14, fontWeight:800, color:T.ink }}>{bk.client_name}</div>
+                <span style={{ background:st.bg, color:st.color, fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20 }}>{st.label}</span>
+              </div>
+              <div style={{ fontSize:12, color:T.inkSoft, marginBottom:4 }}>
+                {bk.booking_type === "offer" ? "🏷️ عرض خاص" : bk.booking_type === "package" ? "🎁 باقة" : "✂️ خدمة"} {bk.service_name && `· ${bk.service_name}`}
+              </div>
+              <div style={{ fontSize:11, color:T.inkMuted, marginBottom:2 }}>
+                🕐 تاريخ الحجز: {bk.created_at ? new Date(bk.created_at).toLocaleDateString('ar-SA') : "—"}
+              </div>
+              <div style={{ fontSize:12, color:T.inkSoft, marginBottom:8 }}>
+                📞 {bk.client_phone} · 📅 {bk.appointment_date} · ⏰ {bk.appointment_time}
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, marginBottom:10 }}>
+                <span style={{ color:T.inkSoft }}>المبلغ: <span style={{ color:T.ink, fontWeight:700 }}>{bk.total_amount} ر.س</span></span>
+                <span style={{ color:T.inkSoft }}>العربون: <span style={{ color:T.gold, fontWeight:700 }}>{bk.deposit_amount} ر.س</span></span>
+              </div>
+              {bk.status === "pending" && (
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={() => updateStatus(bk.id, "confirmed")}
+                    style={{ flex:2, padding:"8px", borderRadius:10, border:"none", background:`linear-gradient(135deg,${T.green},#2E7D32)`, color:T.white, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    ✓ قبول الحجز
+                  </button>
+                  <button onClick={() => updateStatus(bk.id, "cancelled")}
+                    style={{ flex:1, padding:"8px", borderRadius:10, border:`1px solid ${T.redL}`, background:T.white, color:T.red, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    ❌ رفض
+                  </button>
+                </div>
+              )}
+              {bk.status === "confirmed" && (
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={() => updateStatus(bk.id, "completed")}
+                    style={{ flex:2, padding:"8px", borderRadius:10, border:"none", background:T.greenL, color:T.green, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    ✅ تم الاستقبال
+                  </button>
+                  <button onClick={() => updateStatus(bk.id, "cancelled")}
+                    style={{ flex:1, padding:"8px", borderRadius:10, border:`1px solid ${T.redL}`, background:T.white, color:T.red, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    ❌ إلغاء
+                  </button>
+                </div>
+              )}
+            </Card>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 
 
@@ -2046,192 +2160,85 @@ function OwnerRecentBookings({ stats }) {
   )
 }
 
-function OwnerBookings() {
-  const [bookings, setBookings] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState("active")
-  const [dateFrom, setDateFrom] = useState("")
-  const [dateTo, setDateTo] = useState("")
-  const [clientSearch, setClientSearch] = useState("")
-  const [showFilters, setShowFilters] = useState(false)
-  const toast = useToast()
+function OwnerOverview() {
+  const MONTHS = ["يناير","فبراير","مارس","أبريل","مايو","يونيو"]
+  const BARS = [70,85,60,90,75,100]
+  const [ownerStats, setOwnerStats] = useState({ revenue:0, todayBookings:0, totalBookings:0, clients:0, salonId:null })
+  const [detailModal, setDetailModal] = useState(null)
+  const [allBookings, setAllBookings] = useState([])
+  const [statsLoaded, setStatsLoaded] = useState(false)
 
   useEffect(() => {
     const load = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
-      const { data: salonData } = await supabase.from('salons').select('id').eq('email', session.user.email)
-      if (!salonData || salonData.length === 0) { setLoading(false); return }
-      const salonId = salonData[0].id
-      const { data } = await supabase.from('bookings')
-        .select('*')
-        .eq('salon_id', salonId)
-        .order('appointment_date', { ascending: true })
-      setBookings(data || [])
-      setLoading(false)
+      const { data: salon } = await supabase.from('salons').select('id').eq('email', session.user.email)
+      if (!salon || !salon[0]) return
+      const salonId = salon[0].id
+      const today = new Date().toISOString().split('T')[0]
+      const { data: bookings } = await supabase.from('bookings').select('*').eq('salon_id', salonId)
+      if (bookings) {
+        const todayB = bookings.filter(b => b.appointment_date === today).length
+        const revenue = bookings.filter(b => b.status === 'completed').reduce((s, b) => s + (b.total_amount || 0), 0)
+        const clients = new Set(bookings.map(b => b.client_phone)).size
+        setOwnerStats({ revenue, todayBookings: todayB, totalBookings: bookings.length, clients, salonId })
+        setAllBookings(bookings)
+        setStatsLoaded(true)
+      }
     }
     load()
   }, [])
 
-  const updateStatus = async (id, status) => {
-    await supabase.from('bookings').update({ status }).eq('id', id)
-    setBookings(b => b.map(bk => bk.id === id ? { ...bk, status } : bk))
-    toast(status === "completed" ? "✅ تم تحديد الحجز كمكتمل" : "تم إلغاء الحجز")
-  }
+  const today = new Date().toISOString().split('T')[0]
 
-  const STATUS = {
-    pending:   { label:"قيد الانتظار", color:T.gold,    bg:T.goldPale },
-    confirmed: { label:"مؤكد",         color:T.green,   bg:T.greenL },
-    completed: { label:"مكتمل",        color:T.inkSoft, bg:T.creamDk },
-    cancelled: { label:"ملغي",         color:T.red,     bg:T.redL },
-  }
-
-  const filtered = bookings
-    .filter(b => {
-      if (tab === "active")    return b.status === "pending" || b.status === "confirmed"
-      if (tab === "done")      return b.status === "completed"
-      if (tab === "cancelled") return b.status === "cancelled"
-      return true
-    })
-    .filter(b => {
-      if (dateFrom && b.appointment_date && b.appointment_date < dateFrom) return false
-      if (dateTo   && b.appointment_date && b.appointment_date > dateTo)   return false
-      return true
-    })
-    .filter(b => {
-      if (!clientSearch.trim()) return true
-      const q = clientSearch.trim()
-      return (b.client_name || "").includes(q) || (b.client_phone || "").includes(q)
-    })
-
-  const hasFilter = dateFrom || dateTo || clientSearch
-
+  // Modal للتفاصيل
   return (
     <div>
-      <div style={{ display:"flex", background:T.white, borderRadius:12, overflow:"hidden", marginBottom:12, border:`1px solid ${T.creamDk}` }}>
+      {detailModal && (
+        <DetailModal
+          type={detailModal}
+          bookings={allBookings}
+          today={today}
+          onClose={() => setDetailModal(null)}
+        />
+      )}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
         {[
-          { id:"active",    label:"الفعّالة",  icon:"🟢", count: bookings.filter(b => b.status==="pending"||b.status==="confirmed").length },
-          { id:"done",      label:"المكتملة",  icon:"✅", count: bookings.filter(b => b.status==="completed").length },
-          { id:"cancelled", label:"الملغية",   icon:"❌", count: bookings.filter(b => b.status==="cancelled").length },
-        ].map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            style={{ flex:1, padding:"10px 8px", border:"none", borderBottom:`3px solid ${tab===t.id ? T.roseDp : "transparent"}`, background:"transparent", cursor:"pointer", fontSize:11, fontWeight:tab===t.id ? 700 : 400, color:tab===t.id ? T.roseDp : T.inkSoft, fontFamily:"Tajawal,sans-serif" }}>
-            {t.icon} {t.label}
-            {t.count > 0 && <span style={{ background:tab===t.id?T.roseDp:T.creamDk, color:tab===t.id?T.white:T.inkSoft, borderRadius:"50%", padding:"1px 6px", fontSize:10, marginRight:3 }}>{t.count}</span>}
-          </button>
+          { l:"إيرادات الشهر", v: ownerStats.revenue + " ر.س", s: ownerStats.revenue > 0 ? "من الحجوزات" : "لا توجد بيانات", gold:true, modal:"revenue" },
+          { l:"حجوزات اليوم",  v: ownerStats.todayBookings, s: ownerStats.todayBookings > 0 ? "حجز اليوم" : "لا توجد حجوزات", modal:"today" },
+          { l:"إجمالي الحجوزات", v: ownerStats.totalBookings, s:"كل الحجوزات", modal:"all" },
+          { l:"عملاء",    v: ownerStats.clients, s:"مسجلين", modal:"clients" },
+        ].map(st => (
+          <div key={st.l}
+            onClick={() => setDetailModal(st.modal)}
+            style={{ padding:14, background:st.gold ? `linear-gradient(135deg,${T.gold},${T.gold2})` : T.white, cursor:"pointer", borderRadius:16, boxShadow:"0 2px 8px rgba(44,32,24,.08)" }}>
+            <div style={{ fontSize:11, color:st.gold ? "rgba(255,255,255,.8)" : T.inkSoft, marginBottom:5, fontWeight:600 }}>{st.l}</div>
+            <div style={{ fontSize:24, fontWeight:900, color:st.gold ? T.white : T.ink }}>{st.v}</div>
+            <div style={{ fontSize:11, color:st.gold ? "rgba(255,255,255,.7)" : T.rose, marginTop:3 }}>{st.s}</div>
+            <div style={{ fontSize:10, color:st.gold ? "rgba(255,255,255,.5)" : T.roseDp, marginTop:4, fontWeight:600 }}>← التفاصيل</div>
+          </div>
         ))}
       </div>
-
-      <button onClick={() => setShowFilters(!showFilters)}
-        style={{ width:"100%", marginBottom:10, padding:"10px 14px", borderRadius:12, border:`1.5px solid ${showFilters||hasFilter ? T.roseDp : T.creamDk}`, background:showFilters||hasFilter ? T.roseL : T.white, color:showFilters||hasFilter ? T.roseDp : T.inkSoft, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-        <span>🎛 فلترة وبحث {hasFilter && "— مفعّل"}</span>
-        <span style={{ fontSize:10 }}>{showFilters ? "▲" : "▼"}</span>
-      </button>
-
-      {showFilters && (
-        <div style={{ background:T.white, borderRadius:14, padding:14, marginBottom:12, border:`1px solid ${T.creamDk}` }}>
-          <div style={{ marginBottom:12 }}>
-            <label style={{ fontSize:12, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:6 }}>🔍 بحث بالعميلة</label>
-            <input value={clientSearch} onChange={e => setClientSearch(e.target.value)}
-              placeholder="الاسم أو رقم الجوال..."
-              style={{ width:"100%", padding:"10px 14px", border:`1.5px solid ${clientSearch ? T.roseDp : T.creamDk}`, borderRadius:10, fontSize:13, color:T.ink, background:T.cream, outline:"none", fontFamily:"Tajawal,sans-serif" }} />
-          </div>
-          <div>
-            <label style={{ fontSize:12, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:6 }}>📅 فلتر التاريخ</label>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
-              <div>
-                <div style={{ fontSize:11, color:T.inkSoft, marginBottom:4 }}>من</div>
-                <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-                  style={{ width:"100%", padding:"9px 10px", border:`1.5px solid ${dateFrom ? T.roseDp : T.creamDk}`, borderRadius:10, fontSize:12, color:T.ink, background:T.cream, outline:"none", fontFamily:"Tajawal,sans-serif" }} />
-              </div>
-              <div>
-                <div style={{ fontSize:11, color:T.inkSoft, marginBottom:4 }}>إلى</div>
-                <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-                  style={{ width:"100%", padding:"9px 10px", border:`1.5px solid ${dateTo ? T.roseDp : T.creamDk}`, borderRadius:10, fontSize:12, color:T.ink, background:T.cream, outline:"none", fontFamily:"Tajawal,sans-serif" }} />
-              </div>
+      <Card style={{ padding:16, marginBottom:14 }}>
+        <div style={{ fontSize:14, fontWeight:800, color:T.ink, marginBottom:14 }}>المبيعات — آخر 6 أشهر</div>
+        <div style={{ display:"flex", alignItems:"flex-end", gap:8, height:110 }}>
+          {MONTHS.map((m, i) => (
+            <div key={m} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:5 }}>
+              <div style={{ width:"100%", height:`${BARS[i]}%`, borderRadius:"5px 5px 0 0", background:i === 5 ? `linear-gradient(${T.rose},${T.roseDp})` : T.roseL }} />
+              <div style={{ fontSize:9, color:T.inkSoft }}>{m}</div>
             </div>
-            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-              {[
-                { label:"اليوم", from:new Date().toISOString().split('T')[0], to:new Date().toISOString().split('T')[0] },
-                { label:"هذا الأسبوع", from:(() => { const d=new Date(); d.setDate(d.getDate()-d.getDay()); return d.toISOString().split('T')[0] })(), to:new Date().toISOString().split('T')[0] },
-                { label:"هذا الشهر", from:new Date(new Date().getFullYear(),new Date().getMonth(),1).toISOString().split('T')[0], to:new Date().toISOString().split('T')[0] },
-                { label:"الكل", from:"", to:"" },
-              ].map(r => (
-                <button key={r.label} onClick={() => { setDateFrom(r.from); setDateTo(r.to) }}
-                  style={{ padding:"5px 12px", borderRadius:20, border:`1px solid ${dateFrom===r.from&&dateTo===r.to ? T.roseDp : T.creamDk}`, background:dateFrom===r.from&&dateTo===r.to ? T.roseL : T.white, color:dateFrom===r.from&&dateTo===r.to ? T.roseDp : T.inkSoft, fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
-                  {r.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          {hasFilter && (
-            <button onClick={() => { setDateFrom(""); setDateTo(""); setClientSearch("") }}
-              style={{ marginTop:12, width:"100%", padding:"8px", borderRadius:10, border:`1px solid ${T.roseL}`, background:T.white, color:T.roseDp, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
-              ✕ إلغاء كل الفلاتر
-            </button>
-          )}
+          ))}
         </div>
-      )}
+      </Card>
+      <MonthlyChart salonId={ownerStats.salonId} />
 
-      {hasFilter && (
-        <div style={{ fontSize:12, color:T.inkSoft, marginBottom:10, padding:"6px 10px", background:T.roseL, borderRadius:8 }}>
-          🔎 النتائج: {filtered.length} حجز
+      <Card style={{ padding:16 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+          <div style={{ fontSize:14, fontWeight:800, color:T.ink }}>آخر الحجوزات</div>
+          <span style={{ fontSize:10, background:T.roseL, color:T.roseDp, padding:"3px 10px", borderRadius:20, fontWeight:700 }}>🔴 مباشر</span>
         </div>
-      )}
-
-      {loading && <div style={{ textAlign:"center", padding:40, color:T.inkSoft }}>...جاري التحميل</div>}
-      {!loading && filtered.length === 0 && <Empty icon="📅" title="لا توجد حجوزات" desc="جربي تغيير الفلاتر أو ابدأي الاستقبال" />}
-
-      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-        {filtered.map(bk => {
-          const st = STATUS[bk.status] || STATUS.pending
-          return (
-            <Card key={bk.id} style={{ padding:14 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-                <div style={{ fontSize:14, fontWeight:800, color:T.ink }}>{bk.client_name}</div>
-                <span style={{ background:st.bg, color:st.color, fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20 }}>{st.label}</span>
-              </div>
-              <div style={{ fontSize:12, color:T.inkSoft, marginBottom:4 }}>
-                {bk.booking_type === "offer" ? "🏷️ عرض خاص" : bk.booking_type === "package" ? "🎁 باقة" : "✂️ خدمة"} {bk.service_name && `· ${bk.service_name}`}
-              </div>
-              <div style={{ fontSize:11, color:T.inkMuted, marginBottom:2 }}>
-                🕐 تاريخ الحجز: {bk.created_at ? new Date(bk.created_at).toLocaleDateString('ar-SA') : "—"}
-              </div>
-              <div style={{ fontSize:12, color:T.inkSoft, marginBottom:8 }}>
-                📞 {bk.client_phone} · 📅 {bk.appointment_date} · ⏰ {bk.appointment_time}
-              </div>
-              <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, marginBottom:10 }}>
-                <span style={{ color:T.inkSoft }}>المبلغ: <span style={{ color:T.ink, fontWeight:700 }}>{bk.total_amount} ر.س</span></span>
-                <span style={{ color:T.inkSoft }}>العربون: <span style={{ color:T.gold, fontWeight:700 }}>{bk.deposit_amount} ر.س</span></span>
-              </div>
-              {bk.status === "pending" && (
-                <div style={{ display:"flex", gap:8 }}>
-                  <button onClick={() => updateStatus(bk.id, "confirmed")}
-                    style={{ flex:2, padding:"8px", borderRadius:10, border:"none", background:`linear-gradient(135deg,${T.green},#2E7D32)`, color:T.white, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
-                    ✓ قبول الحجز
-                  </button>
-                  <button onClick={() => updateStatus(bk.id, "cancelled")}
-                    style={{ flex:1, padding:"8px", borderRadius:10, border:`1px solid ${T.redL}`, background:T.white, color:T.red, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
-                    ❌ رفض
-                  </button>
-                </div>
-              )}
-              {bk.status === "confirmed" && (
-                <div style={{ display:"flex", gap:8 }}>
-                  <button onClick={() => updateStatus(bk.id, "completed")}
-                    style={{ flex:2, padding:"8px", borderRadius:10, border:"none", background:T.greenL, color:T.green, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
-                    ✅ تم الاستقبال
-                  </button>
-                  <button onClick={() => updateStatus(bk.id, "cancelled")}
-                    style={{ flex:1, padding:"8px", borderRadius:10, border:`1px solid ${T.redL}`, background:T.white, color:T.red, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
-                    ❌ إلغاء
-                  </button>
-                </div>
-              )}
-            </Card>
-          )
-        })}
-      </div>
+        <OwnerRecentBookings stats={ownerStats} />
+      </Card>
     </div>
   )
 }
