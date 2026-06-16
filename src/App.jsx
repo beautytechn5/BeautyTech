@@ -534,6 +534,9 @@ function ClientHome({ setScreen, setSalon }) {
           </div>
         )}
 
+        {/* عروض وباقات */}
+        {!filterType && !q && <HomeOffersSection setScreen={setScreen} setSalon={setSalon} salons={salons} />}
+
         {/* Results header */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
           <div>
