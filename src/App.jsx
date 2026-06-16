@@ -164,6 +164,7 @@ function useSalons() {
           .filter(sv => sv.salon_id === s.id)
           .map(sv => ({ n: sv.name, p: sv.price, dur: sv.duration, timeFrom: sv.time_from, timeTo: sv.time_to, days: sv.days })),
         wa: (s.phone || "0500000000"),
+        mapUrl: s.map_url || "",
         availNow: true,
       })))
     }
@@ -536,7 +537,8 @@ function ClientHome({ setScreen, setSalon }) {
                   <PBtn full onClick={() => { setSalon(s); setScreen("booking") }}>احجزي الآن</PBtn>
                   <a href={"https://wa.me/966" + s.wa.slice(1)} target="_blank" rel="noreferrer"
                     style={{ width:46, height:46, borderRadius:12, background:T.waL, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, textDecoration:"none", flexShrink:0 }}>💬</a>
-                  <button style={{ width:46, height:46, borderRadius:12, background:T.goldPale, border:"none", fontSize:20, cursor:"pointer", flexShrink:0 }}>📍</button>
+                  <button onClick={() => { if (s.mapUrl) window.open(s.mapUrl, "_blank"); else alert("الصالون لم يضف موقعه بعد") }}
+                    style={{ width:46, height:46, borderRadius:12, background:T.goldPale, border:"none", fontSize:20, cursor:"pointer", flexShrink:0 }}>📍</button>
                 </div>
               </div>
             </Card>
@@ -1994,7 +1996,7 @@ function OwnerPackage({ toast }) {
 }
 
 function OwnerSettings({ toast }) {
-  const [form, setForm] = useState({ salonName:"", ownerName:"", phone:"", email:"", city:"", bio:"", wa:"", insta:"" })
+  const [form, setForm] = useState({ salonName:"", ownerName:"", phone:"", email:"", city:"", bio:"", wa:"", insta:"", mapUrl:"" })
   const [photos, setPhotos] = useState([])
   const [focusF, setFocusF] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -2018,6 +2020,7 @@ function OwnerSettings({ toast }) {
             bio: s.bio || "",
             wa: s.phone || "",
             insta: s.insta || "",
+            mapUrl: s.map_url || "",
           })
         }
       })
@@ -2034,6 +2037,7 @@ function OwnerSettings({ toast }) {
       city: form.city,
       bio: form.bio,
       insta: form.insta,
+      map_url: form.mapUrl,
     }).eq('id', salonId)
     setSaving(false)
     if (error) { toast("⚠ حدث خطأ: " + error.message); return }
@@ -2090,6 +2094,11 @@ function OwnerSettings({ toast }) {
         <div>
           <label style={{ fontSize:12, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:5 }}>📷 إنستغرام (اختياري)</label>
           <input value={form.insta} onChange={set("insta")} placeholder="@salon_name" onFocus={() => setFocusF("ig")} onBlur={() => setFocusF(null)} style={inp("ig")} />
+        </div>
+        <div style={{ marginTop:12 }}>
+          <label style={{ fontSize:12, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:5 }}>📍 رابط قوقل ماب (اختياري)</label>
+          <input value={form.mapUrl} onChange={set("mapUrl")} placeholder="https://maps.google.com/..." onFocus={() => setFocusF("mp")} onBlur={() => setFocusF(null)} style={inp("mp")} />
+          <div style={{ fontSize:11, color:T.inkSoft, marginTop:4 }}>افتحي موقعك في قوقل ماب ← Share ← Copy Link</div>
         </div>
       </Card>
 
