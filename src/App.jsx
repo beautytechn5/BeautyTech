@@ -1422,6 +1422,61 @@ function OwnerBookings() {
 }
 
 
+
+function DetailModal({ type, bookings, today, onClose }) {
+  let title = "", items = []
+
+  if (type === "revenue") {
+    title = "💰 تفاصيل الإيرادات"
+    const completed = bookings.filter(b => b.status === "completed")
+    items = completed.length > 0
+      ? completed.map(b => ({ label: b.client_name || "عميلة", value: (b.total_amount||0) + " ر.س", sub: b.appointment_date }))
+      : [{ label:"لا توجد إيرادات بعد", value:"", sub:"" }]
+  } else if (type === "today") {
+    title = "📅 حجوزات اليوم"
+    const tod = bookings.filter(b => b.appointment_date === today)
+    items = tod.length > 0
+      ? tod.map(b => ({ label: b.client_name || "عميلة", value: b.appointment_time, sub: b.status === "completed" ? "مكتمل" : b.status === "cancelled" ? "ملغي" : "انتظار" }))
+      : [{ label:"لا توجد حجوزات اليوم", value:"", sub:"" }]
+  } else if (type === "all") {
+    title = "📊 كل الحجوزات"
+    items = bookings.length > 0
+      ? bookings.map(b => ({ label: b.client_name || "عميلة", value: (b.total_amount||0) + " ر.س", sub: b.appointment_date + " · " + (b.status === "completed" ? "مكتمل" : b.status === "cancelled" ? "ملغي" : "انتظار") }))
+      : [{ label:"لا توجد حجوزات", value:"", sub:"" }]
+  } else if (type === "clients") {
+    title = "👤 العملاء"
+    const unique = [...new Set(bookings.map(b => b.client_phone))]
+    items = unique.length > 0
+      ? unique.map(phone => {
+          const bks = bookings.filter(b => b.client_phone === phone)
+          return { label: bks[0]?.client_name || "عميلة", value: bks.length + " حجز", sub: phone }
+        })
+      : [{ label:"لا يوجد عملاء بعد", value:"", sub:"" }]
+  }
+
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(44,32,24,.5)", zIndex:3000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background:T.white, borderRadius:"24px 24px 0 0", width:"100%", maxWidth:560, maxHeight:"80vh", overflow:"hidden", display:"flex", flexDirection:"column" }}>
+        <div style={{ padding:"16px 20px", borderBottom:`1px solid ${T.creamDk}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div style={{ fontSize:16, fontWeight:800, color:T.ink }}>{title}</div>
+          <button onClick={onClose} style={{ width:30, height:30, borderRadius:"50%", border:"none", background:T.cream, cursor:"pointer", fontSize:14 }}>✕</button>
+        </div>
+        <div style={{ overflowY:"auto", padding:"14px 20px", flex:1 }}>
+          {items.map((it, i) => (
+            <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:`1px solid ${T.creamDk}` }}>
+              <div>
+                <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{it.label}</div>
+                {it.sub && <div style={{ fontSize:11, color:T.inkSoft, marginTop:2 }}>{it.sub}</div>}
+              </div>
+              {it.value && <div style={{ fontSize:14, fontWeight:800, color:T.roseDp }}>{it.value}</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function OwnerRecentBookings({ stats }) {
   const [bookings, setBookings] = useState([])
   const [selected, setSelected] = useState(null)
@@ -1526,59 +1581,16 @@ function OwnerOverview() {
   const today = new Date().toISOString().split('T')[0]
 
   // Modal للتفاصيل
-  const renderDetailModal = () => {
-    if (!detailModal) return null
-    let title = "", items = []
-    if (detailModal === "revenue") {
-      title = "💰 تفاصيل الإيرادات"
-      const completed = allBookings.filter(b => b.status === "completed")
-      items = completed.map(b => ({ label: b.client_name || "عميلة", value: (b.total_amount||0) + " ر.س", sub: b.appointment_date }))
-      if (items.length === 0) items = [{ label:"لا توجد إيرادات بعد", value:"", sub:"" }]
-    } else if (detailModal === "today") {
-      title = "📅 حجوزات اليوم"
-      const tod = allBookings.filter(b => b.appointment_date === today)
-      items = tod.map(b => ({ label: b.client_name || "عميلة", value: b.appointment_time, sub: b.status === "completed" ? "مكتمل" : b.status === "cancelled" ? "ملغي" : "قيد الانتظار" }))
-      if (items.length === 0) items = [{ label:"لا توجد حجوزات اليوم", value:"", sub:"" }]
-    } else if (detailModal === "all") {
-      title = "📊 كل الحجوزات"
-      items = allBookings.map(b => ({ label: b.client_name || "عميلة", value: (b.total_amount||0) + " ر.س", sub: b.appointment_date + " · " + (b.status === "completed" ? "مكتمل" : b.status === "cancelled" ? "ملغي" : "انتظار") }))
-      if (items.length === 0) items = [{ label:"لا توجد حجوزات", value:"", sub:"" }]
-    } else if (detailModal === "clients") {
-      title = "👤 العملاء"
-      const unique = [...new Set(allBookings.map(b => b.client_phone))]
-      items = unique.map(phone => {
-        const bks = allBookings.filter(b => b.client_phone === phone)
-        return { label: bks[0]?.client_name || "عميلة", value: bks.length + " حجز", sub: phone }
-      })
-      if (items.length === 0) items = [{ label:"لا يوجد عملاء بعد", value:"", sub:"" }]
-    }
-    return (
-      <div onClick={() => setDetailModal(null)} style={{ position:"fixed", inset:0, background:"rgba(44,32,24,.5)", zIndex:3000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-        <div onClick={e => e.stopPropagation()} style={{ background:T.white, borderRadius:"24px 24px 0 0", width:"100%", maxWidth:560, maxHeight:"80vh", overflow:"hidden", display:"flex", flexDirection:"column" }}>
-          <div style={{ padding:"16px 20px", borderBottom:`1px solid ${T.creamDk}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <div style={{ fontSize:16, fontWeight:800, color:T.ink }}>{title}</div>
-            <button onClick={() => setDetailModal(null)} style={{ width:30, height:30, borderRadius:"50%", border:"none", background:T.cream, cursor:"pointer", fontSize:14 }}>✕</button>
-          </div>
-          <div style={{ overflowY:"auto", padding:"14px 20px", flex:1 }}>
-            {!statsLoaded && <div style={{ textAlign:"center", padding:20, color:T.inkSoft }}>...جاري التحميل</div>}
-            {statsLoaded && items.map((it, i) => (
-              <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:`1px solid ${T.creamDk}` }}>
-                <div>
-                  <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{it.label}</div>
-                  {it.sub && <div style={{ fontSize:11, color:T.inkSoft, marginTop:2 }}>{it.sub}</div>}
-                </div>
-                {it.value && <div style={{ fontSize:14, fontWeight:800, color:T.roseDp }}>{it.value}</div>}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div>
-      {renderDetailModal()}
+      {detailModal && (
+        <DetailModal
+          type={detailModal}
+          bookings={allBookings}
+          today={today}
+          onClose={() => setDetailModal(null)}
+        />
+      )}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
         {[
           { l:"إيرادات الشهر", v: ownerStats.revenue + " ر.س", s: ownerStats.revenue > 0 ? "من الحجوزات" : "لا توجد بيانات", gold:true, modal:"revenue" },
