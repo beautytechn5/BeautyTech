@@ -865,17 +865,24 @@ function SalonDetailPage({ salon, setScreen, setSalon }) {
 /* ══════════════════════════════════════════
    🎁 GIFT PAGE — إهداء للأحباب
 ══════════════════════════════════════════ */
-function GiftBookingPage({ setScreen, setSalon, salons }) {
+function GiftBookingPage({ setScreen, setSalon }) {
   const toast = useToast()
   const [step, setStep] = useState(1)
   const [selectedSalon, setSelectedSalon] = useState(null)
   const [selectedService, setSelectedService] = useState(null)
   const [services, setServices] = useState([])
+  const [salons, setSalons] = useState([])
   const [recipientName, setRecipientName] = useState("")
   const [recipientPhone, setRecipientPhone] = useState("")
   const [giftMessage, setGiftMessage] = useState("")
   const [giftCode, setGiftCode] = useState("")
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    supabase.from('salons').select('*').then(({ data }) => {
+      if (data) setSalons(data.map(s => ({ ...s, imageUrl: s.image_url || "" })))
+    })
+  }, [])
 
   const loadServices = async (salon) => {
     setSelectedSalon(salon)
@@ -4338,6 +4345,10 @@ function Navbar({ screen, setScreen }) {
             )}
             {role === "client" && (
               <>
+                <button onClick={() => setScreen("gift-booking")}
+                  style={{ padding:"7px 12px", borderRadius:50, border:"none", background:T.roseL, color:T.roseDp, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                  🎁 إهداء
+                </button>
                 <button onClick={() => setScreen("my-bookings")}
                   style={{ padding:"7px 12px", borderRadius:50, border:`1.5px solid ${T.roseL}`, background:T.white, color:T.roseDp, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
                   📅 حجوزاتي
@@ -4355,6 +4366,10 @@ function Navbar({ screen, setScreen }) {
           </>
         ) : (
           <>
+            <button onClick={() => setScreen("gift-booking")}
+              style={{ padding:"7px 12px", borderRadius:50, border:`1.5px solid ${T.roseL}`, background:T.roseL, color:T.roseDp, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+              🎁 إهداء
+            </button>
             <span onClick={() => setScreen("client-login")} style={{ fontSize:12, fontWeight:600, color:T.inkSoft, cursor:"pointer", padding:"6px 4px" }}>دخول</span>
             <span onClick={() => setScreen("client-register")} style={{ fontSize:12, fontWeight:600, color:T.inkSoft, cursor:"pointer", padding:"6px 4px" }}>تسجيل</span>
             <div style={{ width:1, height:18, background:T.roseL }} />
@@ -4422,7 +4437,7 @@ export default function App() {
     if (screen === "client-register") return <ClientRegister setScreen={go} />
     if (screen === "booking")         return <BookingPage salon={salon} setScreen={go} />
     if (screen === "salon-detail")     return <SalonDetailPage salon={salon} setScreen={go} setSalon={setSalon} />
-    if (screen === "gift-booking")      return <GiftBookingPage setScreen={go} setSalon={setSalon} salons={salons} />
+    if (screen === "gift-booking")      return <GiftBookingPage setScreen={go} setSalon={setSalon} />
     if (screen === "owner-register")  return <OwnerRegister setScreen={go} />
     if (screen === "owner-login")     return <OwnerLogin setScreen={go} />
     if (screen === "owner-dashboard") return <OwnerDashboard setScreen={go} />
