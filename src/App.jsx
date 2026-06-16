@@ -593,7 +593,7 @@ function BookingPage({ salon, setScreen }) {
   const [agreed, setAgreed] = useState(false)
   const [termsOpen, setTermsOpen] = useState(false)
   const deposit = svc ? Math.round(svc.p * 0.3) : 0
-  const ALL_SVC_TIMES = ["08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"]
+  const ALL_SVC_TIMES = ["00:00","00:30","01:00","01:30","02:00","02:30","03:00","03:30","04:00","04:30","05:00","05:30","06:00","06:30","07:00","07:30","08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00","21:30","22:00","22:30","23:00","23:30"]
   const getSvcTimes = () => {
     if (!svc || !svc.timeFrom || !svc.timeTo) return ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30"]
     const fi = ALL_SVC_TIMES.indexOf(svc.timeFrom)
@@ -1426,14 +1426,35 @@ function OwnerBookings() {
 function OwnerOverview() {
   const MONTHS = ["يناير","فبراير","مارس","أبريل","مايو","يونيو"]
   const BARS = [70,85,60,90,75,100]
+  const [ownerStats, setOwnerStats] = useState({ revenue:0, todayBookings:0, totalBookings:0, clients:0 })
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      const { data: salon } = await supabase.from('salons').select('id').eq('email', session.user.email)
+      if (!salon || !salon[0]) return
+      const salonId = salon[0].id
+      const today = new Date().toISOString().split('T')[0]
+      const { data: bookings } = await supabase.from('bookings').select('*').eq('salon_id', salonId)
+      if (bookings) {
+        const todayB = bookings.filter(b => b.appointment_date === today).length
+        const revenue = bookings.filter(b => b.status === 'completed').reduce((s, b) => s + (b.total_amount || 0), 0)
+        const clients = new Set(bookings.map(b => b.client_phone)).size
+        setOwnerStats({ revenue, todayBookings: todayB, totalBookings: bookings.length, clients })
+      }
+    }
+    load()
+  }, [])
+
   return (
     <div>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
         {[
-          { l:"إيرادات الشهر", v:"0", s:"لا توجد بيانات", gold:true },
-          { l:"حجوزات اليوم",  v:"0", s:"لا توجد حجوزات" },
-          { l:"متوسط التقييم", v:"—", s:"لا توجد تقييمات" },
-          { l:"عملاء جدد",    v:"0", s:"هذا الشهر" },
+          { l:"إيرادات الشهر", v: ownerStats.revenue + " ر.س", s: ownerStats.revenue > 0 ? "من الحجوزات" : "لا توجد بيانات", gold:true },
+          { l:"حجوزات اليوم",  v: ownerStats.todayBookings, s: ownerStats.todayBookings > 0 ? "حجز اليوم" : "لا توجد حجوزات" },
+          { l:"إجمالي الحجوزات", v: ownerStats.totalBookings, s:"كل الحجوزات" },
+          { l:"عملاء",    v: ownerStats.clients, s:"مسجلين" },
         ].map(st => (
           <Card key={st.l} style={{ padding:14, background:st.gold ? `linear-gradient(135deg,${T.gold},${T.gold2})` : T.white }}>
             <div style={{ fontSize:11, color:st.gold ? "rgba(255,255,255,.8)" : T.inkSoft, marginBottom:5, fontWeight:600 }}>{st.l}</div>
@@ -1465,39 +1486,103 @@ function OwnerOverview() {
 }
 
 function OwnerInventory({ toast }) {
-  const ITEMS = [
-    { n:"صبغة لوريال #5",  linked:true,  svc:"صبغ كامل (50مل)",  pct:72, qty:"360مل/500مل", alert:false },
-    { n:"أسيتون مزيل ورنيش", linked:true, svc:"أكريليك (10مل)",   pct:20, qty:"100مل/500مل", alert:true  },
-    { n:"كيراتين برازيلي", linked:true,  svc:"كيراتين (80مل)",    pct:55, qty:"550مل/1000مل",alert:false },
-    { n:"كريم مرطب شعر",   linked:false, svc:null,                 pct:88, qty:"440مل/500مل", alert:false },
-  ]
+  const [items, setItems] = useState([
+    { id:1, n:"صبغة لوريال #5",  pct:72, total:500, used:140, unit:"مل", alert:false },
+    { id:2, n:"أسيتون مزيل ورنيش", pct:20, total:500, used:400, unit:"مل", alert:true  },
+    { id:3, n:"كيراتين برازيلي", pct:55, total:1000, used:450, unit:"مل", alert:false },
+    { id:4, n:"كريم مرطب شعر", pct:88, total:500, used:60, unit:"مل", alert:false },
+  ])
+  const [showAdd, setShowAdd] = useState(false)
+  const [newItem, setNewItem] = useState({ n:"", total:"", unit:"مل" })
+  const [focusF, setFocusF] = useState(null)
+
+  const addItem = () => {
+    if (!newItem.n || !newItem.total) { toast("⚠ أدخلي اسم المنتج والكمية"); return }
+    setItems(i => [...i, { id:Date.now(), n:newItem.n, pct:100, total:Number(newItem.total), used:0, unit:newItem.unit, alert:false }])
+    setNewItem({ n:"", total:"", unit:"مل" })
+    setShowAdd(false)
+    toast("✅ تمت إضافة المنتج!")
+  }
+
+  const useItem = (id, amount) => {
+    setItems(i => i.map(item => {
+      if (item.id !== id) return item
+      const newUsed = Math.min(item.used + amount, item.total)
+      const pct = Math.round(((item.total - newUsed) / item.total) * 100)
+      return { ...item, used: newUsed, pct, alert: pct < 25 }
+    }))
+  }
+
+  const inp = (k) => ({
+    width:"100%", padding:"10px 12px",
+    border:`1.5px solid ${focusF===k ? T.rose : T.creamDk}`,
+    borderRadius:10, fontSize:14, color:T.ink, background:T.cream,
+    outline:"none", fontFamily:"Tajawal,sans-serif",
+  })
+
   return (
     <div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
         <div>
           <div style={{ fontSize:16, fontWeight:800, color:T.ink }}>إدارة المخزون</div>
-          <div style={{ fontSize:11, color:T.inkSoft, marginTop:2 }}>خصم تلقائي عند تنفيذ الخدمة</div>
+          <div style={{ fontSize:11, color:T.inkSoft, marginTop:2 }}>تتبع المواد المستخدمة</div>
         </div>
-        <PBtn sm onClick={() => setShowAddItem(true)}>+ إضافة</PBtn>
+        <PBtn sm onClick={() => setShowAdd(!showAdd)}>+ إضافة</PBtn>
       </div>
-      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-        {ITEMS.map(item => (
-          <Card key={item.n} style={{ padding:14 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
-              <div>
-                <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{item.n}</div>
-                {item.svc && <div style={{ fontSize:11, color:T.inkSoft, marginTop:2 }}>مرتبطة بـ: {item.svc}</div>}
-              </div>
-              {item.linked && <span style={{ fontSize:10, color:T.roseDp, background:T.roseL, padding:"2px 8px", borderRadius:10, fontWeight:700 }}>مربوطة</span>}
+
+      {showAdd && (
+        <Card style={{ padding:16, marginBottom:14, border:`2px solid ${T.roseL}` }}>
+          <div style={{ fontSize:13, fontWeight:800, color:T.ink, marginBottom:12 }}>منتج جديد</div>
+          <div style={{ marginBottom:10 }}>
+            <label style={{ fontSize:12, color:T.inkSoft, display:"block", marginBottom:5 }}>اسم المنتج *</label>
+            <input value={newItem.n} onChange={e => setNewItem(i => ({ ...i, n:e.target.value }))}
+              placeholder="مثال: صبغة لوريال" onFocus={() => setFocusF("n")} onBlur={() => setFocusF(null)} style={inp("n")} />
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:10, marginBottom:14 }}>
+            <div>
+              <label style={{ fontSize:12, color:T.inkSoft, display:"block", marginBottom:5 }}>الكمية الكلية *</label>
+              <input type="number" value={newItem.total} onChange={e => setNewItem(i => ({ ...i, total:e.target.value }))}
+                placeholder="500" onFocus={() => setFocusF("t")} onBlur={() => setFocusF(null)} style={inp("t")} />
             </div>
-            <div style={{ background:T.creamDk, borderRadius:4, height:5, overflow:"hidden", margin:"8px 0" }}>
+            <div>
+              <label style={{ fontSize:12, color:T.inkSoft, display:"block", marginBottom:5 }}>الوحدة</label>
+              <select value={newItem.unit} onChange={e => setNewItem(i => ({ ...i, unit:e.target.value }))}
+                style={{ ...inp("u"), cursor:"pointer" }}>
+                {["مل","غرام","كغ","قطعة","علبة"].map(u => <option key={u}>{u}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:8 }}>
+            <OBtn onClick={() => setShowAdd(false)}>إلغاء</OBtn>
+            <div style={{ flex:1 }}><PBtn full onClick={addItem}>✓ إضافة</PBtn></div>
+          </div>
+        </Card>
+      )}
+
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        {items.map(item => (
+          <Card key={item.id} style={{ padding:14 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{item.n}</div>
+              <button onClick={() => setItems(i => i.filter(x => x.id !== item.id))}
+                style={{ width:24, height:24, borderRadius:"50%", border:`1px solid ${T.redL}`, background:T.white, color:T.red, fontSize:12, cursor:"pointer" }}>✕</button>
+            </div>
+            <div style={{ background:T.creamDk, borderRadius:4, height:6, overflow:"hidden", margin:"8px 0" }}>
               <div style={{ height:"100%", borderRadius:4, width:item.pct + "%", background:item.alert ? `linear-gradient(90deg,#E87070,${T.red})` : `linear-gradient(90deg,${T.rose},${T.roseDp})` }} />
             </div>
-            <div style={{ display:"flex", justifyContent:"space-between", fontSize:11 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginBottom:8 }}>
               {item.alert
-                ? <span style={{ color:T.red, fontWeight:700 }}>{"⚠ " + item.pct + "% — اطلب الآن"}</span>
-                : <span style={{ color:T.inkSoft }}>{item.pct + "% متبقي"}</span>}
-              <span style={{ color:T.inkSoft }}>{item.qty}</span>
+                ? <span style={{ color:T.red, fontWeight:700 }}>⚠ {item.pct}% — اطلبي الآن!</span>
+                : <span style={{ color:T.inkSoft }}>{item.pct}% متبقي</span>}
+              <span style={{ color:T.inkSoft }}>{item.total - item.used}/{item.total} {item.unit}</span>
+            </div>
+            <div style={{ display:"flex", gap:6 }}>
+              {[10,25,50].map(amt => (
+                <button key={amt} onClick={() => useItem(item.id, amt)}
+                  style={{ flex:1, padding:"6px", borderRadius:8, border:`1px solid ${T.creamDk}`, background:T.cream, color:T.inkSoft, fontSize:11, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                  -{amt} {item.unit}
+                </button>
+              ))}
             </div>
           </Card>
         ))}
@@ -1705,7 +1790,7 @@ function OwnerWhatsapp({ toast }) {
    ⏰ OWNER SERVICES — مع الأوقات المتاحة
 ══════════════════════════════════════════ */
 const DAYS = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"]
-const ALL_TIMES = ["08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"]
+const ALL_TIMES = ["00:00","00:30","01:00","01:30","02:00","02:30","03:00","03:30","04:00","04:30","05:00","05:30","06:00","06:30","07:00","07:30","08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00","21:30","22:00","22:30","23:00","23:30"]
 
 function OwnerServices({ toast }) {
   const [services, setServices] = useState([
@@ -2710,6 +2795,42 @@ function GiftPage({ setScreen }) {
 }
 
 
+
+function RatingWidget({ bookingId, onRate }) {
+  const [selected, setSelected] = useState(0)
+  const [hover, setHover] = useState(0)
+  const [saved, setSaved] = useState(false)
+  const toast = useToast()
+
+  const save = async () => {
+    if (!selected) { toast("⚠ اختاري تقييماً"); return }
+    await supabase.from('bookings').update({ rating: selected }).eq('id', bookingId)
+    setSaved(true)
+    onRate(selected)
+    toast("✅ شكراً على تقييمك!")
+  }
+
+  if (saved) return null
+
+  return (
+    <div style={{ background:T.goldPale, borderRadius:12, padding:"12px 14px", border:`1px solid ${T.goldL}` }}>
+      <div style={{ fontSize:13, fontWeight:700, color:T.ink, marginBottom:8, textAlign:"center" }}>قيّمي تجربتك ⭐</div>
+      <div style={{ display:"flex", justifyContent:"center", gap:6, marginBottom:10 }}>
+        {[1,2,3,4,5].map(n => (
+          <span key={n}
+            onClick={() => setSelected(n)}
+            onMouseOver={() => setHover(n)}
+            onMouseOut={() => setHover(0)}
+            style={{ fontSize:28, cursor:"pointer", transition:"transform .1s", transform: (hover||selected) >= n ? "scale(1.2)" : "scale(1)" }}>
+            {(hover||selected) >= n ? "★" : "☆"}
+          </span>
+        ))}
+      </div>
+      <PBtn full sm onClick={save}>إرسال التقييم</PBtn>
+    </div>
+  )
+}
+
 /* ══════════════════════════════════════════
    📅 MY BOOKINGS PAGE — للعميلة
 ══════════════════════════════════════════ */
@@ -2814,6 +2935,16 @@ function MyBookingsPage({ setScreen }) {
                     style={{ width:"100%", padding:"9px", borderRadius:10, border:`1px solid ${T.redL}`, background:T.white, color:T.red, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
                     إلغاء الحجز
                   </button>
+                )}
+                {bk.status === "completed" && !bk.rating && (
+                  <RatingWidget bookingId={bk.id} onRate={(r) => {
+                    setBookings(b => b.map(bk2 => bk2.id === bk.id ? { ...bk2, rating:r } : bk2))
+                  }} />
+                )}
+                {bk.status === "completed" && bk.rating && (
+                  <div style={{ textAlign:"center", fontSize:13, color:T.gold, fontWeight:700 }}>
+                    {"★".repeat(bk.rating) + "☆".repeat(5-bk.rating)} تقييمك: {bk.rating}/5
+                  </div>
                 )}
               </Card>
             )
