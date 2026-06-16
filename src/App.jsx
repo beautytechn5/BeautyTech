@@ -188,6 +188,7 @@ function useSalons() {
         wa: (s.phone || "0500000000"),
         mapUrl: s.map_url || "",
         imageUrl: s.image_url || "",
+        gallery: s.gallery || [],
         availNow: true,
         hasOffers: (allOffers || []).some(o => o.salon_id === s.id && o.type === 'offer'),
         hasPackages: (allOffers || []).some(o => o.salon_id === s.id && o.type === 'package'),
@@ -1892,11 +1893,23 @@ function OwnerBookings() {
                 <span style={{ color:T.inkSoft }}>المبلغ: <span style={{ color:T.ink, fontWeight:700 }}>{bk.total_amount} ر.س</span></span>
                 <span style={{ color:T.inkSoft }}>العربون: <span style={{ color:T.gold, fontWeight:700 }}>{bk.deposit_amount} ر.س</span></span>
               </div>
-              {(bk.status === "pending" || bk.status === "confirmed") && (
+              {bk.status === "pending" && (
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={() => updateStatus(bk.id, "confirmed")}
+                    style={{ flex:2, padding:"8px", borderRadius:10, border:"none", background:`linear-gradient(135deg,${T.green},#2E7D32)`, color:T.white, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    ✓ قبول الحجز
+                  </button>
+                  <button onClick={() => updateStatus(bk.id, "cancelled")}
+                    style={{ flex:1, padding:"8px", borderRadius:10, border:`1px solid ${T.redL}`, background:T.white, color:T.red, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    ❌ رفض
+                  </button>
+                </div>
+              )}
+              {bk.status === "confirmed" && (
                 <div style={{ display:"flex", gap:8 }}>
                   <button onClick={() => updateStatus(bk.id, "completed")}
-                    style={{ flex:1, padding:"8px", borderRadius:10, border:"none", background:T.greenL, color:T.green, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
-                    ✅ مكتمل
+                    style={{ flex:2, padding:"8px", borderRadius:10, border:"none", background:T.greenL, color:T.green, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    ✅ تم الاستقبال
                   </button>
                   <button onClick={() => updateStatus(bk.id, "cancelled")}
                     style={{ flex:1, padding:"8px", borderRadius:10, border:`1px solid ${T.redL}`, background:T.white, color:T.red, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
@@ -1965,6 +1978,56 @@ function DetailModal({ type, bookings, today, onClose }) {
         </div>
       </div>
     </div>
+  )
+}
+
+
+function MonthlyChart({ salonId }) {
+  const [data, setData] = useState([])
+
+  useEffect(() => {
+    if (!salonId) return
+    supabase.from('bookings').select('appointment_date,total_amount,status')
+      .eq('salon_id', salonId)
+      .eq('status', 'completed')
+      .then(({ data: bks }) => {
+        if (!bks) return
+        const months = {}
+        const now = new Date()
+        for (let i = 5; i >= 0; i--) {
+          const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+          const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
+          const label = d.toLocaleDateString('ar-SA', { month:'short' })
+          months[key] = { label, revenue:0, count:0 }
+        }
+        bks.forEach(b => {
+          const key = (b.appointment_date || "").slice(0,7)
+          if (months[key]) {
+            months[key].revenue += b.total_amount || 0
+            months[key].count++
+          }
+        })
+        setData(Object.values(months))
+      })
+  }, [salonId])
+
+  if (data.length === 0) return null
+  const maxRev = Math.max(...data.map(d => d.revenue), 1)
+
+  return (
+    <Card style={{ padding:16, marginBottom:14 }}>
+      <div style={{ fontSize:14, fontWeight:800, color:T.ink, marginBottom:14 }}>📈 الإيرادات — آخر 6 أشهر</div>
+      <div style={{ display:"flex", alignItems:"flex-end", gap:6, height:100 }}>
+        {data.map((d, i) => (
+          <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
+            <div style={{ fontSize:9, color:T.inkSoft, marginBottom:2 }}>{d.revenue > 0 ? d.revenue : ""}</div>
+            <div style={{ width:"100%", height: Math.max((d.revenue/maxRev)*80, 4), background:d.revenue > 0 ? `linear-gradient(180deg,${T.roseDp},${T.rose})` : T.creamDk, borderRadius:"4px 4px 0 0", transition:"height .5s" }} />
+            <div style={{ fontSize:9, color:T.inkSoft }}>{d.label}</div>
+            {d.count > 0 && <div style={{ fontSize:8, color:T.roseDp, fontWeight:700 }}>{d.count} حجز</div>}
+          </div>
+        ))}
+      </div>
+    </Card>
   )
 }
 
@@ -2063,7 +2126,7 @@ function OwnerOverview() {
         const todayB = bookings.filter(b => b.appointment_date === today).length
         const revenue = bookings.filter(b => b.status === 'completed').reduce((s, b) => s + (b.total_amount || 0), 0)
         const clients = new Set(bookings.map(b => b.client_phone)).size
-        setOwnerStats({ revenue, todayBookings: todayB, totalBookings: bookings.length, clients })
+        setOwnerStats({ revenue, todayBookings: todayB, totalBookings: bookings.length, clients, salonId })
         setAllBookings(bookings)
         setStatsLoaded(true)
       }
@@ -3027,6 +3090,7 @@ function OwnerSettings({ toast }) {
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [salonId, setSalonId] = useState(null)
+  const [salonImages, setSalonImages] = useState([])
   const set = k => e => setForm(f => ({ ...f, [k]:e.target.value }))
 
   // جلب بيانات الصالون عند الفتح
@@ -3049,6 +3113,7 @@ function OwnerSettings({ toast }) {
             mapUrl: s.map_url || "",
             imageUrl: s.image_url || "",
           })
+          setSalonImages(s.gallery || (s.image_url ? [s.image_url] : []))
         }
       })
     })
