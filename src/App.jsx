@@ -1500,6 +1500,7 @@ function OwnerOverview() {
   const [ownerStats, setOwnerStats] = useState({ revenue:0, todayBookings:0, totalBookings:0, clients:0 })
   const [detailModal, setDetailModal] = useState(null)
   const [allBookings, setAllBookings] = useState([])
+  const [statsLoaded, setStatsLoaded] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -1516,6 +1517,7 @@ function OwnerOverview() {
         const clients = new Set(bookings.map(b => b.client_phone)).size
         setOwnerStats({ revenue, todayBookings: todayB, totalBookings: bookings.length, clients })
         setAllBookings(bookings)
+        setStatsLoaded(true)
       }
     }
     load()
@@ -1558,7 +1560,8 @@ function OwnerOverview() {
             <button onClick={() => setDetailModal(null)} style={{ width:30, height:30, borderRadius:"50%", border:"none", background:T.cream, cursor:"pointer", fontSize:14 }}>✕</button>
           </div>
           <div style={{ overflowY:"auto", padding:"14px 20px", flex:1 }}>
-            {items.map((it, i) => (
+            {!statsLoaded && <div style={{ textAlign:"center", padding:20, color:T.inkSoft }}>...جاري التحميل</div>}
+            {statsLoaded && items.map((it, i) => (
               <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:`1px solid ${T.creamDk}` }}>
                 <div>
                   <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{it.label}</div>
