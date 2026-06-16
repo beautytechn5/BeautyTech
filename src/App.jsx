@@ -275,6 +275,91 @@ function TypingText() {
   )
 }
 
+
+function HomeOffersSection({ setScreen, setSalon, salons }) {
+  const [offers, setOffers] = useState([])
+
+  useEffect(() => {
+    supabase.from('offers').select('*, salons(name, city, phone)').eq('active', true).order('created_at', { ascending:false }).limit(10).then(({ data }) => {
+      setOffers(data || [])
+    })
+  }, [])
+
+  if (offers.length === 0) return null
+
+  const bookOffer = async (offer) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    const salon = salons.find(s => s.id === offer.salon_id) || { id: offer.salon_id, name: offer.salons?.name || "", city: offer.salons?.city || "", services:[], wa: offer.salons?.phone || "" }
+    if (!session) {
+      setSalon({ ...salon, services: [{ n: offer.title, p: offer.discounted_price, dur:60, isOffer:true }] })
+      setScreen("client-login")
+      return
+    }
+    setSalon({ ...salon, services: [{ n: offer.title, p: offer.discounted_price, dur:60, isOffer:true }] })
+    setScreen("booking")
+  }
+
+  const byType = (t) => offers.filter(o => o.type === t)
+
+  return (
+    <div style={{ marginBottom:6 }}>
+      {byType("offer").length > 0 && (
+        <div style={{ marginBottom:16 }}>
+          <div style={{ fontSize:15, fontWeight:800, color:T.ink, marginBottom:12, padding:"0 18px" }}>🏷️ عروض خاصة</div>
+          <div style={{ display:"flex", gap:12, overflowX:"auto", padding:"0 18px 8px", scrollbarWidth:"none" }}>
+            {byType("offer").map(o => {
+              const disc = o.original_price ? Math.round((1 - o.discounted_price/o.original_price)*100) : 0
+              return (
+                <div key={o.id} style={{ minWidth:220, background:`linear-gradient(135deg,${T.roseL},#FFF0E8)`, borderRadius:16, padding:"14px", border:`1.5px solid ${T.rose}`, flexShrink:0 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
+                    <div style={{ fontSize:13, fontWeight:800, color:T.ink, flex:1 }}>{o.title}</div>
+                    {disc > 0 && <span style={{ background:T.red, color:T.white, fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20, flexShrink:0 }}>-{disc}%</span>}
+                  </div>
+                  <div style={{ fontSize:11, color:T.inkSoft, marginBottom:6 }}>{o.salons?.name} — {o.salons?.city}</div>
+                  {o.description && <div style={{ fontSize:11, color:T.inkSoft, marginBottom:8 }}>{o.description}</div>}
+                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+                    {o.original_price && <span style={{ fontSize:11, color:T.inkSoft, textDecoration:"line-through" }}>{o.original_price} ر.س</span>}
+                    <span style={{ fontSize:16, fontWeight:900, color:T.roseDp }}>{o.discounted_price} ر.س</span>
+                  </div>
+                  {o.valid_until && <div style={{ fontSize:10, color:T.inkSoft, marginBottom:8 }}>⏰ حتى: {o.valid_until}</div>}
+                  <button onClick={() => bookOffer(o)}
+                    style={{ width:"100%", padding:"9px", borderRadius:10, border:"none", background:T.roseDp, color:T.white, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    احجزي الآن ←
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {byType("package").length > 0 && (
+        <div style={{ marginBottom:16 }}>
+          <div style={{ fontSize:15, fontWeight:800, color:T.ink, marginBottom:12, padding:"0 18px" }}>🎁 باقات مميزة</div>
+          <div style={{ display:"flex", gap:12, overflowX:"auto", padding:"0 18px 8px", scrollbarWidth:"none" }}>
+            {byType("package").map(o => (
+              <div key={o.id} style={{ minWidth:220, background:`linear-gradient(135deg,${T.goldPale},#FFFBF0)`, borderRadius:16, padding:"14px", border:`1.5px solid ${T.goldL}`, flexShrink:0 }}>
+                <div style={{ fontSize:13, fontWeight:800, color:T.ink, marginBottom:6 }}>📦 {o.title}</div>
+                <div style={{ fontSize:11, color:T.inkSoft, marginBottom:6 }}>{o.salons?.name} — {o.salons?.city}</div>
+                {o.description && <div style={{ fontSize:11, color:T.inkSoft, marginBottom:8 }}>{o.description}</div>}
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+                  {o.original_price && <span style={{ fontSize:11, color:T.inkSoft, textDecoration:"line-through" }}>{o.original_price} ر.س</span>}
+                  <span style={{ fontSize:16, fontWeight:900, color:T.gold }}>{o.discounted_price} ر.س</span>
+                </div>
+                {o.valid_until && <div style={{ fontSize:10, color:T.inkSoft, marginBottom:8 }}>⏰ حتى: {o.valid_until}</div>}
+                <button onClick={() => bookOffer(o)}
+                  style={{ width:"100%", padding:"9px", borderRadius:10, border:"none", background:`linear-gradient(135deg,${T.gold},${T.gold2})`, color:T.white, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                  احجزي الباقة ←
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ClientHome({ setScreen, setSalon }) {
   const salons = useSalons()
   const [filterType, setFilterType] = useState("")
@@ -786,6 +871,8 @@ function BookingPage({ salon, setScreen }) {
       deposit_amount: deposit,
       status: 'pending',
       user_id: session?.user?.id || null,
+      service_name: svc ? svc.n : "",
+      booking_type: svc?.isOffer ? "offer" : "service",
     }])
     if (error) { toast("⚠ حدث خطأ: " + error.message); return }
     toast("✅ تم الحجز! سيصلكِ تأكيد على واتساب")
@@ -1576,6 +1663,9 @@ function OwnerBookings() {
                 <div style={{ fontSize:14, fontWeight:800, color:T.ink }}>{bk.client_name}</div>
                 <span style={{ background:st.bg, color:st.color, fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20 }}>{st.label}</span>
               </div>
+              <div style={{ fontSize:12, color:T.inkSoft, marginBottom:4 }}>
+                {bk.booking_type === "offer" ? "🏷️ عرض خاص" : bk.booking_type === "package" ? "🎁 باقة" : "✂️ خدمة"} {bk.service_name && `· ${bk.service_name}`}
+              </div>
               <div style={{ fontSize:12, color:T.inkSoft, marginBottom:8 }}>
                 📞 {bk.client_phone} · 📅 {bk.appointment_date} · ⏰ {bk.appointment_time}
               </div>
@@ -1780,15 +1870,14 @@ function OwnerOverview() {
           { l:"إجمالي الحجوزات", v: ownerStats.totalBookings, s:"كل الحجوزات", modal:"all" },
           { l:"عملاء",    v: ownerStats.clients, s:"مسجلين", modal:"clients" },
         ].map(st => (
-          <Card key={st.l} onClick={() => setDetailModal(st.modal)}
-            style={{ padding:14, background:st.gold ? `linear-gradient(135deg,${T.gold},${T.gold2})` : T.white, cursor:"pointer", transition:"transform .2s" }}
-            onMouseOver={e => e.currentTarget.style.transform="scale(1.02)"}
-            onMouseOut={e => e.currentTarget.style.transform="scale(1)"}>
+          <div key={st.l}
+            onClick={() => setDetailModal(st.modal)}
+            style={{ padding:14, background:st.gold ? `linear-gradient(135deg,${T.gold},${T.gold2})` : T.white, cursor:"pointer", borderRadius:16, boxShadow:"0 2px 8px rgba(44,32,24,.08)" }}>
             <div style={{ fontSize:11, color:st.gold ? "rgba(255,255,255,.8)" : T.inkSoft, marginBottom:5, fontWeight:600 }}>{st.l}</div>
             <div style={{ fontSize:24, fontWeight:900, color:st.gold ? T.white : T.ink }}>{st.v}</div>
             <div style={{ fontSize:11, color:st.gold ? "rgba(255,255,255,.7)" : T.rose, marginTop:3 }}>{st.s}</div>
-            <div style={{ fontSize:10, color:st.gold ? "rgba(255,255,255,.5)" : T.inkMuted, marginTop:4 }}>← اضغط للتفاصيل</div>
-          </Card>
+            <div style={{ fontSize:10, color:st.gold ? "rgba(255,255,255,.5)" : T.roseDp, marginTop:4, fontWeight:600 }}>← التفاصيل</div>
+          </div>
         ))}
       </div>
       <Card style={{ padding:16, marginBottom:14 }}>
@@ -3656,7 +3745,8 @@ function MyBookingsPage({ setScreen }) {
 
                 <div style={{ background:T.cream, borderRadius:10, padding:"10px 14px", marginBottom:12 }}>
                   {[
-                    ["📋 الخدمة", bk.service_id || "—"],
+                    ["📋 الخدمة", bk.service_name || bk.service_id || "—"],
+                    ["🏷️ النوع", bk.booking_type === "offer" ? "عرض خاص" : bk.booking_type === "package" ? "باقة" : "خدمة عادية"],
                     ["📅 التاريخ", bk.appointment_date || "—"],
                     ["⏰ الوقت",  bk.appointment_time || "—"],
                     ["💰 المبلغ", (bk.total_amount || 0) + " ر.س"],
