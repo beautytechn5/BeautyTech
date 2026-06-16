@@ -474,9 +474,7 @@ function ClientHome({ setScreen, setSalon }) {
             <Card key={s.id} style={{ overflow:"hidden" }}>
               <div style={{ height:90, background:`linear-gradient(135deg,${T.roseL},${T.goldPale})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:40, position:"relative" }}>
                 {s.emoji}
-                <div style={{ position:"absolute", top:10, right:12, background:T.white, color:T.gold, fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20, border:`1px solid ${T.goldL}` }}>
-                  {s.pkg === "نخبة" ? "✦ نخبة" : "⚡ توسع"}
-                </div>
+
                 {s.availNow && (
                   <div style={{ position:"absolute", top:10, left:12, background:T.greenL, color:T.green, fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20, display:"flex", alignItems:"center", gap:4 }}>
                     <span style={{ width:5, height:5, borderRadius:"50%", background:T.green, display:"inline-block" }} />
@@ -1619,12 +1617,7 @@ function OwnerOverview() {
 }
 
 function OwnerInventory({ toast }) {
-  const [items, setItems] = useState([
-    { id:1, n:"صبغة لوريال #5",  pct:72, total:500, used:140, unit:"مل", alert:false },
-    { id:2, n:"أسيتون مزيل ورنيش", pct:20, total:500, used:400, unit:"مل", alert:true  },
-    { id:3, n:"كيراتين برازيلي", pct:55, total:1000, used:450, unit:"مل", alert:false },
-    { id:4, n:"كريم مرطب شعر", pct:88, total:500, used:60, unit:"مل", alert:false },
-  ])
+  const [items, setItems] = useState([])
   const [showAdd, setShowAdd] = useState(false)
   const [editItemId, setEditItemId] = useState(null)
   const [newItem, setNewItem] = useState({ n:"", total:"", unit:"مل" })
@@ -1948,14 +1941,30 @@ const DAYS = ["الأحد","الاثنين","الثلاثاء","الأربعاء
 const ALL_TIMES = ["00:00","00:30","01:00","01:30","02:00","02:30","03:00","03:30","04:00","04:30","05:00","05:30","06:00","06:30","07:00","07:30","08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00","21:30","22:00","22:30","23:00","23:30"]
 
 function OwnerServices({ toast }) {
-  const [services, setServices] = useState([
-    { id:1, name:"قص شعر", price:150, duration:45, active:true,
-      days:["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس"],
-      timeFrom:"09:00", timeTo:"18:00" },
-    { id:2, name:"صبغ كامل", price:380, duration:120, active:true,
-      days:["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس"],
-      timeFrom:"09:00", timeTo:"16:00" },
-  ])
+  const [services, setServices] = useState([])
+  const [loadingSvcs, setLoadingSvcs] = useState(true)
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { setLoadingSvcs(false); return }
+      const { data: salon } = await supabase.from('salons').select('id').eq('email', session.user.email)
+      if (!salon || !salon[0]) { setLoadingSvcs(false); return }
+      const { data: svcs } = await supabase.from('services').select('*').eq('salon_id', salon[0].id)
+      if (svcs) setServices(svcs.map(s => ({
+        id: s.id,
+        name: s.name,
+        price: s.price,
+        duration: s.duration || 60,
+        active: s.active !== false,
+        days: s.days || [],
+        timeFrom: s.time_from || "09:00",
+        timeTo: s.time_to || "18:00",
+      })))
+      setLoadingSvcs(false)
+    }
+    load()
+  }, [])
   const [showAdd, setShowAdd] = useState(false)
   const [editId, setEditId] = useState(null)
   const [editSvc, setEditSvc] = useState(null)
@@ -3060,6 +3069,129 @@ function RatingWidget({ bookingId, onRate }) {
   )
 }
 
+
+/* ══════════════════════════════════════════
+   👤 CLIENT PROFILE PAGE
+══════════════════════════════════════════ */
+function ClientProfile({ setScreen }) {
+  const toast = useToast()
+  const [form, setForm] = useState({ name:"", phone:"", email:"", city:"" })
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [clientId, setClientId] = useState(null)
+  const [focusF, setFocusF] = useState(null)
+  const set = k => e => setForm(f => ({ ...f, [k]:e.target.value }))
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { setScreen("client-login"); return }
+      const { data } = await supabase.from('clients').select('*').eq('email', session.user.email)
+      if (data && data[0]) {
+        setClientId(data[0].id)
+        setForm({
+          name: data[0].full_name || "",
+          phone: data[0].phone || "",
+          email: data[0].email || "",
+          city: data[0].city || "",
+        })
+      } else {
+        setForm(f => ({ ...f, email: session.user.email || "", name: session.user.user_metadata?.name || "" }))
+      }
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const save = async () => {
+    setSaving(true)
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    if (clientId) {
+      await supabase.from('clients').update({ full_name:form.name, phone:form.phone, city:form.city }).eq('id', clientId)
+    } else {
+      await supabase.from('clients').insert([{ full_name:form.name, phone:form.phone, email:form.email, city:form.city }])
+    }
+    setSaving(false)
+    toast("✅ تم حفظ بياناتك!")
+  }
+
+  const inp = (k) => ({
+    width:"100%", padding:"13px 16px",
+    border:`1.5px solid ${focusF===k ? T.rose : T.creamDk}`,
+    borderRadius:12, fontSize:14, color:T.ink, background:T.cream,
+    outline:"none", fontFamily:"Tajawal,sans-serif", transition:"border-color .2s",
+  })
+
+  if (loading) return <div style={{ padding:40, textAlign:"center", color:T.inkSoft }}>...جاري التحميل</div>
+
+  return (
+    <div style={{ background:T.cream, minHeight:"100vh", paddingBottom:40 }}>
+      <div style={{ background:T.white, borderBottom:`1px solid ${T.roseL}`, padding:"14px 20px", display:"flex", alignItems:"center", gap:12 }}>
+        <button onClick={() => setScreen("client-home")} style={{ width:36, height:36, borderRadius:"50%", border:"none", background:T.cream, cursor:"pointer", fontSize:16 }}>←</button>
+        <div style={{ fontSize:16, fontWeight:800, color:T.ink }}>ملفي الشخصي 👤</div>
+      </div>
+
+      <div style={{ padding:"24px 18px" }}>
+        {/* Avatar */}
+        <div style={{ textAlign:"center", marginBottom:24 }}>
+          <div style={{ width:80, height:80, borderRadius:"50%", background:`linear-gradient(135deg,${T.roseL},${T.goldPale})`, margin:"0 auto 12px", display:"flex", alignItems:"center", justifyContent:"center", fontSize:36 }}>
+            💅
+          </div>
+          <div style={{ fontSize:18, fontWeight:800, color:T.ink }}>{form.name || "اسمك هنا"}</div>
+          <div style={{ fontSize:13, color:T.inkSoft }}>{form.email}</div>
+        </div>
+
+        <Card style={{ padding:18, marginBottom:14 }}>
+          <div style={{ fontSize:14, fontWeight:800, color:T.ink, marginBottom:16 }}>بياناتي</div>
+          <div style={{ marginBottom:14 }}>
+            <label style={{ display:"block", fontSize:13, fontWeight:700, color:T.inkSoft, marginBottom:7 }}>الاسم الكامل</label>
+            <input value={form.name} onChange={set("name")} placeholder="اسمك الكامل"
+              onFocus={() => setFocusF("n")} onBlur={() => setFocusF(null)} style={inp("n")} />
+          </div>
+          <div style={{ marginBottom:14 }}>
+            <label style={{ display:"block", fontSize:13, fontWeight:700, color:T.inkSoft, marginBottom:7 }}>رقم الجوال</label>
+            <input type="tel" value={form.phone} onChange={set("phone")} placeholder="05xxxxxxxx"
+              onFocus={() => setFocusF("p")} onBlur={() => setFocusF(null)} style={inp("p")} />
+          </div>
+          <div style={{ marginBottom:14 }}>
+            <label style={{ display:"block", fontSize:13, fontWeight:700, color:T.inkSoft, marginBottom:7 }}>البريد الإلكتروني</label>
+            <input value={form.email} disabled
+              style={{ ...inp("e"), opacity:.6, cursor:"not-allowed" }} />
+          </div>
+          <div style={{ marginBottom:16 }}>
+            <label style={{ display:"block", fontSize:13, fontWeight:700, color:T.inkSoft, marginBottom:7 }}>المدينة</label>
+            <select value={form.city} onChange={set("city")}
+              onFocus={() => setFocusF("c")} onBlur={() => setFocusF(null)}
+              style={{ ...inp("c"), cursor:"pointer" }}>
+              <option value="">اختاري مدينتك</option>
+              {["الرياض","جدة","مكة المكرمة","المدينة المنورة","الدمام","الخبر","أبها","تبوك","القصيم"].map(c => <option key={c}>{c}</option>)}
+            </select>
+          </div>
+          <PBtn full disabled={saving} onClick={save}>{saving ? "...جاري الحفظ" : "✓ حفظ البيانات"}</PBtn>
+        </Card>
+
+        {/* Quick links */}
+        <Card style={{ padding:18 }}>
+          <div style={{ fontSize:14, fontWeight:800, color:T.ink, marginBottom:14 }}>الوصول السريع</div>
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+            <button onClick={() => setScreen("my-bookings")}
+              style={{ padding:"12px 16px", borderRadius:12, border:`1px solid ${T.creamDk}`, background:T.cream, color:T.ink, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"Tajawal,sans-serif", textAlign:"right", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <span>←</span>
+              <span>📅 حجوزاتي</span>
+            </button>
+            <button onClick={async () => { await supabase.auth.signOut(); setScreen("client-home") }}
+              style={{ padding:"12px 16px", borderRadius:12, border:`1px solid ${T.redL}`, background:T.white, color:T.red, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"Tajawal,sans-serif", textAlign:"right", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <span>←</span>
+              <span>🚪 تسجيل الخروج</span>
+            </button>
+          </div>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
 /* ══════════════════════════════════════════
    📅 MY BOOKINGS PAGE — للعميلة
 ══════════════════════════════════════════ */
@@ -3444,10 +3576,16 @@ function Navbar({ screen, setScreen }) {
               </button>
             )}
             {role === "client" && (
-              <button onClick={() => setScreen("my-bookings")}
-                style={{ padding:"7px 12px", borderRadius:50, border:`1.5px solid ${T.roseL}`, background:T.white, color:T.roseDp, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
-                📅 حجوزاتي
-              </button>
+              <>
+                <button onClick={() => setScreen("my-bookings")}
+                  style={{ padding:"7px 12px", borderRadius:50, border:`1.5px solid ${T.roseL}`, background:T.white, color:T.roseDp, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                  📅 حجوزاتي
+                </button>
+                <button onClick={() => setScreen("profile")}
+                  style={{ padding:"7px 12px", borderRadius:50, border:`1.5px solid ${T.creamDk}`, background:T.white, color:T.inkSoft, fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                  👤 ملفي
+                </button>
+              </>
             )}
             <button onClick={logout}
               style={{ padding:"7px 12px", borderRadius:50, border:`1.5px solid ${T.creamDk}`, background:T.white, color:T.inkSoft, fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
@@ -3533,6 +3671,7 @@ export default function App() {
     if (screen === "404")             return <NotFoundPage   setScreen={go} />
     if (screen === "gift")             return <GiftPage        setScreen={go} />
     if (screen === "my-bookings")      return <MyBookingsPage  setScreen={go} />
+    if (screen === "profile")           return <ClientProfile   setScreen={go} />
     return <ClientHome setScreen={go} setSalon={setSalon} />
   }
 
