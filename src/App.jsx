@@ -1931,59 +1931,178 @@ function OwnerBookings() {
 
 
 function DetailModal({ type, bookings, today, onClose }) {
-  let title = "", items = []
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
+  const [search, setSearch] = useState("")
 
-  if (type === "revenue") {
-    title = "💰 تفاصيل الإيرادات"
-    const completed = bookings.filter(b => b.status === "completed")
-    items = completed.length > 0
-      ? completed.map(b => ({ label: b.client_name || "عميلة", value: (b.total_amount||0) + " ر.س", sub: b.appointment_date }))
-      : [{ label:"لا توجد إيرادات بعد", value:"", sub:"" }]
-  } else if (type === "today") {
-    title = "📅 حجوزات اليوم"
-    const tod = bookings.filter(b => b.appointment_date === today)
-    items = tod.length > 0
-      ? tod.map(b => ({ label: b.client_name || "عميلة", value: b.appointment_time, sub: b.status === "completed" ? "مكتمل" : b.status === "cancelled" ? "ملغي" : "انتظار" }))
-      : [{ label:"لا توجد حجوزات اليوم", value:"", sub:"" }]
-  } else if (type === "all") {
-    title = "📊 كل الحجوزات"
-    items = bookings.length > 0
-      ? bookings.map(b => ({ label: b.client_name || "عميلة", value: (b.total_amount||0) + " ر.س", sub: b.appointment_date + " · " + (b.status === "completed" ? "مكتمل" : b.status === "cancelled" ? "ملغي" : "انتظار") }))
-      : [{ label:"لا توجد حجوزات", value:"", sub:"" }]
-  } else if (type === "clients") {
-    title = "👤 العملاء"
-    const unique = [...new Set(bookings.map(b => b.client_phone))]
-    items = unique.length > 0
-      ? unique.map(phone => {
-          const bks = bookings.filter(b => b.client_phone === phone)
-          return { label: bks[0]?.client_name || "عميلة", value: bks.length + " حجز", sub: phone }
-        })
-      : [{ label:"لا يوجد عملاء بعد", value:"", sub:"" }]
+  const titles = { revenue:"💰 الإيرادات", today:"📅 حجوزات اليوم", all:"📊 كل الحجوزات", clients:"👤 العملاء" }
+
+  // فلترة حسب التاريخ والبحث
+  const filtered = bookings.filter(b => {
+    if (dateFrom && b.appointment_date < dateFrom) return false
+    if (dateTo && b.appointment_date > dateTo) return false
+    if (search) {
+      const s = search.toLowerCase()
+      return (b.client_name||"").toLowerCase().includes(s) || (b.client_phone||"").includes(s)
+    }
+    return true
+  })
+
+  const getItems = () => {
+    if (type === "revenue") {
+      const completed = filtered.filter(b => b.status === "completed")
+      const total = completed.reduce((s,b) => s+(b.total_amount||0), 0)
+      return { list: completed.map(b => ({
+        label: b.client_name || "عميلة",
+        value: (b.total_amount||0) + " ر.س",
+        sub: `📅 ${b.appointment_date} · ⏰ ${b.appointment_time||""} · حُجز: ${b.created_at ? new Date(b.created_at).toLocaleDateString("ar-SA") : ""}`,
+        tag: b.service_name
+      })), total: total + " ر.س إجمالي" }
+    }
+    if (type === "today") {
+      const tod = filtered.filter(b => b.appointment_date === today)
+      return { list: tod.map(b => ({
+        label: b.client_name || "عميلة",
+        value: b.appointment_time || "",
+        sub: `${b.service_name || ""} · ${b.status === "completed" ? "✅ مكتمل" : b.status === "cancelled" ? "❌ ملغي" : "⏳ انتظار"}`,
+        tag: null
+      })), total: null }
+    }
+    if (type === "all") {
+      return { list: filtered.map(b => ({
+        label: b.client_name || "عميلة",
+        value: (b.total_amount||0) + " ر.س",
+        sub: `📅 ${b.appointment_date} · ⏰ ${b.appointment_time||""} · ${b.status==="completed"?"✅ مكتمل":b.status==="cancelled"?"❌ ملغي":"⏳ انتظار"} · حُجز: ${b.created_at ? new Date(b.created_at).toLocaleDateString("ar-SA") : ""}`,
+        tag: b.service_name
+      })), total: filtered.length + " حجز" }
+    }
+    if (type === "clients") {
+      const unique = [...new Set(filtered.map(b => b.client_phone))]
+      return { list: unique.map(phone => {
+        const bks = filtered.filter(b => b.client_phone === phone)
+        const lastBk = bks[0]
+        return {
+          label: lastBk?.client_name || "عميلة",
+          value: bks.length + " حجز",
+          sub: `📞 ${phone} · آخر زيارة: ${lastBk?.appointment_date || ""}`,
+          tag: null
+        }
+      }), total: unique.length + " عميلة" }
+    }
+    return { list: [], total: null }
   }
+
+  const { list, total } = getItems()
 
   return (
     <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(44,32,24,.5)", zIndex:3000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-      <div onClick={e => e.stopPropagation()} style={{ background:T.white, borderRadius:"24px 24px 0 0", width:"100%", maxWidth:560, maxHeight:"80vh", overflow:"hidden", display:"flex", flexDirection:"column" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background:T.white, borderRadius:"24px 24px 0 0", width:"100%", maxWidth:560, maxHeight:"88vh", overflow:"hidden", display:"flex", flexDirection:"column" }}>
+        
+        {/* Header */}
         <div style={{ padding:"16px 20px", borderBottom:`1px solid ${T.creamDk}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-          <div style={{ fontSize:16, fontWeight:800, color:T.ink }}>{title}</div>
+          <div style={{ fontSize:16, fontWeight:800, color:T.ink }}>{titles[type]}</div>
           <button onClick={onClose} style={{ width:30, height:30, borderRadius:"50%", border:"none", background:T.cream, cursor:"pointer", fontSize:14 }}>✕</button>
         </div>
-        <div style={{ overflowY:"auto", padding:"14px 20px", flex:1 }}>
-          {items.map((it, i) => (
-            <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:`1px solid ${T.creamDk}` }}>
+
+        {/* فلاتر */}
+        <div style={{ padding:"12px 20px", borderBottom:`1px solid ${T.creamDk}`, background:T.cream }}>
+          {(type === "all" || type === "revenue") && (
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
               <div>
-                <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{it.label}</div>
-                {it.sub && <div style={{ fontSize:11, color:T.inkSoft, marginTop:2 }}>{it.sub}</div>}
+                <label style={{ fontSize:10, color:T.inkSoft, display:"block", marginBottom:3 }}>من تاريخ</label>
+                <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                  style={{ width:"100%", padding:"7px 10px", border:`1px solid ${T.creamDk}`, borderRadius:8, fontSize:12, fontFamily:"Tajawal,sans-serif", background:T.white }} />
               </div>
-              {it.value && <div style={{ fontSize:14, fontWeight:800, color:T.roseDp }}>{it.value}</div>}
+              <div>
+                <label style={{ fontSize:10, color:T.inkSoft, display:"block", marginBottom:3 }}>إلى تاريخ</label>
+                <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                  style={{ width:"100%", padding:"7px 10px", border:`1px solid ${T.creamDk}`, borderRadius:8, fontSize:12, fontFamily:"Tajawal,sans-serif", background:T.white }} />
+              </div>
+            </div>
+          )}
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder={type === "clients" ? "ابحث بالاسم أو الجوال..." : "ابحث بالاسم..."}
+            style={{ width:"100%", padding:"8px 12px", border:`1px solid ${T.creamDk}`, borderRadius:8, fontSize:13, fontFamily:"Tajawal,sans-serif", background:T.white, outline:"none" }} />
+        </div>
+
+        {/* القائمة */}
+        <div style={{ overflowY:"auto", flex:1 }}>
+          {list.length === 0 && (
+            <div style={{ textAlign:"center", padding:30, color:T.inkSoft }}>لا توجد نتائج</div>
+          )}
+          {list.map((it, i) => (
+            <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", padding:"12px 20px", borderBottom:`1px solid ${T.creamDk}` }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{it.label}</div>
+                {it.tag && <div style={{ fontSize:11, color:T.roseDp, marginTop:1 }}>{it.tag}</div>}
+                {it.sub && <div style={{ fontSize:11, color:T.inkSoft, marginTop:2, lineHeight:1.6 }}>{it.sub}</div>}
+              </div>
+              {it.value && <div style={{ fontSize:14, fontWeight:800, color:T.roseDp, marginRight:8, flexShrink:0 }}>{it.value}</div>}
             </div>
           ))}
         </div>
+
+        {/* الإجمالي */}
+        {total && (
+          <div style={{ padding:"12px 20px", borderTop:`1px solid ${T.creamDk}`, background:T.cream, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <span style={{ fontSize:13, fontWeight:700, color:T.ink }}>الإجمالي</span>
+            <span style={{ fontSize:15, fontWeight:900, color:T.roseDp }}>{total}</span>
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
+
+
+function SalesChart({ salonId }) {
+  const [data, setData] = useState([])
+
+  useEffect(() => {
+    if (!salonId) return
+    supabase.from('bookings').select('appointment_date,total_amount,status,service_name')
+      .eq('salon_id', salonId)
+      .order('appointment_date', { ascending:false })
+      .limit(30)
+      .then(({ data: bks }) => {
+        if (!bks) return
+        // تجميع حسب اليوم
+        const days = {}
+        bks.forEach(b => {
+          const d = b.appointment_date || ""
+          if (!d) return
+          if (!days[d]) days[d] = { date:d, revenue:0, count:0 }
+          if (b.status === "completed") days[d].revenue += b.total_amount || 0
+          days[d].count++
+        })
+        setData(Object.values(days).sort((a,b) => a.date.localeCompare(b.date)).slice(-14))
+      })
+  }, [salonId])
+
+  if (data.length === 0) return null
+  const maxRev = Math.max(...data.map(d => d.revenue), 1)
+
+  return (
+    <Card style={{ padding:16, marginBottom:14 }}>
+      <div style={{ fontSize:14, fontWeight:800, color:T.ink, marginBottom:4 }}>📊 المبيعات اليومية — آخر 14 يوم</div>
+      <div style={{ fontSize:11, color:T.inkSoft, marginBottom:14 }}>الإيرادات المكتملة فقط</div>
+      <div style={{ display:"flex", alignItems:"flex-end", gap:3, height:80, overflowX:"auto" }}>
+        {data.map((d, i) => (
+          <div key={i} style={{ minWidth:28, flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
+            <div style={{ fontSize:7, color:T.roseDp, fontWeight:700 }}>{d.revenue > 0 ? d.revenue : ""}</div>
+            <div style={{ width:"100%", height: Math.max((d.revenue/maxRev)*60, d.count > 0 ? 6 : 2),
+              background: d.revenue > 0 ? `linear-gradient(180deg,${T.gold},${T.goldL})` : T.creamDk,
+              borderRadius:"4px 4px 0 0" }} />
+            <div style={{ fontSize:7, color:T.inkSoft, whiteSpace:"nowrap" }}>
+              {d.date.slice(5)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
 
 function MonthlyChart({ salonId }) {
   const [data, setData] = useState([])
