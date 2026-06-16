@@ -166,6 +166,7 @@ function useSalons() {
           .map(sv => ({ n: sv.name, p: sv.price, dur: sv.duration, timeFrom: sv.time_from, timeTo: sv.time_to, days: sv.days })),
         wa: (s.phone || "0500000000"),
         mapUrl: s.map_url || "",
+        imageUrl: s.image_url || "",
         availNow: true,
         hasOffers: (allOffers || []).some(o => o.salon_id === s.id && o.type === 'offer'),
         hasPackages: (allOffers || []).some(o => o.salon_id === s.id && o.type === 'package'),
@@ -769,8 +770,10 @@ function SalonDetailPage({ salon, setScreen, setSalon }) {
       </div>
 
       {/* Hero */}
-      <div style={{ height:140, background:`linear-gradient(135deg,${T.roseL},${T.goldPale})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:60 }}>
-        💅
+      <div style={{ height:180, background:`linear-gradient(135deg,${T.roseL},${T.goldPale})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:60, position:"relative", overflow:"hidden" }}>
+        {salon.imageUrl
+          ? <img src={salon.imageUrl} alt={salon.name} style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover" }} />
+          : "💅"}
       </div>
 
       <div style={{ padding:"16px 18px" }}>
@@ -2806,10 +2809,11 @@ function OwnerPackage({ toast }) {
 }
 
 function OwnerSettings({ toast }) {
-  const [form, setForm] = useState({ salonName:"", ownerName:"", phone:"", email:"", city:"", bio:"", wa:"", insta:"", mapUrl:"" })
+  const [form, setForm] = useState({ salonName:"", ownerName:"", phone:"", email:"", city:"", bio:"", wa:"", insta:"", mapUrl:"", imageUrl:"" })
   const [photos, setPhotos] = useState([])
   const [focusF, setFocusF] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [salonId, setSalonId] = useState(null)
   const set = k => e => setForm(f => ({ ...f, [k]:e.target.value }))
 
@@ -2831,6 +2835,7 @@ function OwnerSettings({ toast }) {
             wa: s.phone || "",
             insta: s.insta || "",
             mapUrl: s.map_url || "",
+            imageUrl: s.image_url || "",
           })
         }
       })
