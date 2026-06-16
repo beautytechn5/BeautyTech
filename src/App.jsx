@@ -2062,16 +2062,19 @@ function DetailModal({ type, bookings, today, onClose }) {
 
 function SalesChart({ salonId }) {
   const [data, setData] = useState([])
+  const [allBks, setAllBks] = useState([])
+  const [selectedDay, setSelectedDay] = useState(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!salonId) return
-    supabase.from('bookings').select('appointment_date,total_amount,status,service_name')
+    if (!salonId) { setLoading(false); return }
+    supabase.from('bookings').select('*')
       .eq('salon_id', salonId)
       .order('appointment_date', { ascending:false })
-      .limit(30)
+      .limit(60)
       .then(({ data: bks }) => {
-        if (!bks) return
-        // تجميع حسب اليوم
+        if (!bks) { setLoading(false); return }
+        setAllBks(bks)
         const days = {}
         bks.forEach(b => {
           const d = b.appointment_date || ""
@@ -2081,30 +2084,74 @@ function SalesChart({ salonId }) {
           days[d].count++
         })
         setData(Object.values(days).sort((a,b) => a.date.localeCompare(b.date)).slice(-14))
+        setLoading(false)
       })
   }, [salonId])
 
-  if (data.length === 0) return null
+  if (loading) return null
+  if (data.length === 0 || data.every(d => d.count === 0)) return null
+
   const maxRev = Math.max(...data.map(d => d.revenue), 1)
+  const selectedBks = selectedDay ? allBks.filter(b => b.appointment_date === selectedDay) : []
+  const STATUS = { pending:"⏳ انتظار", confirmed:"✓ مؤكد", completed:"✅ مكتمل", cancelled:"❌ ملغي" }
 
   return (
-    <Card style={{ padding:16, marginBottom:14 }}>
-      <div style={{ fontSize:14, fontWeight:800, color:T.ink, marginBottom:4 }}>📊 المبيعات اليومية — آخر 14 يوم</div>
-      <div style={{ fontSize:11, color:T.inkSoft, marginBottom:14 }}>الإيرادات المكتملة فقط</div>
-      <div style={{ display:"flex", alignItems:"flex-end", gap:3, height:80, overflowX:"auto" }}>
-        {data.map((d, i) => (
-          <div key={i} style={{ minWidth:28, flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
-            <div style={{ fontSize:7, color:T.roseDp, fontWeight:700 }}>{d.revenue > 0 ? d.revenue : ""}</div>
-            <div style={{ width:"100%", height: Math.max((d.revenue/maxRev)*60, d.count > 0 ? 6 : 2),
-              background: d.revenue > 0 ? `linear-gradient(180deg,${T.gold},${T.goldL})` : T.creamDk,
-              borderRadius:"4px 4px 0 0" }} />
-            <div style={{ fontSize:7, color:T.inkSoft, whiteSpace:"nowrap" }}>
-              {d.date.slice(5)}
+    <div>
+      <Card style={{ padding:16, marginBottom:14 }}>
+        <div style={{ fontSize:14, fontWeight:800, color:T.ink, marginBottom:4 }}>📊 المبيعات اليومية — آخر 14 يوم</div>
+        <div style={{ fontSize:11, color:T.inkSoft, marginBottom:14 }}>اضغط على اليوم لعرض تفاصيله</div>
+        <div style={{ display:"flex", alignItems:"flex-end", gap:4, height:110 }}>
+          {data.map((d, i) => (
+            <div key={i} onClick={() => setSelectedDay(selectedDay === d.date ? null : d.date)}
+              style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:3, cursor:"pointer" }}>
+              <div style={{ fontSize:8, color:T.gold, fontWeight:700 }}>{d.revenue > 0 ? d.revenue : ""}</div>
+              <div style={{
+                width:"100%",
+                height: Math.max((d.revenue/maxRev)*80, d.count > 0 ? 8 : 4),
+                background: selectedDay === d.date ? T.gold : d.revenue > 0 ? `linear-gradient(180deg,${T.gold},${T.goldL})` : T.creamDk,
+                borderRadius:"6px 6px 0 0", transition:"all .3s",
+                border: selectedDay === d.date ? `2px solid ${T.gold}` : "none"
+              }} />
+              <div style={{ fontSize:8, color: selectedDay === d.date ? T.gold : T.inkSoft, fontWeight: selectedDay === d.date ? 700 : 400, whiteSpace:"nowrap" }}>
+                {d.date.slice(5)}
+              </div>
+              {d.count > 0 && <div style={{ fontSize:7, color:T.inkSoft }}>{d.count}</div>}
             </div>
+          ))}
+        </div>
+      </Card>
+
+      {selectedDay && selectedBks.length > 0 && (
+        <Card style={{ padding:16, marginBottom:14, border:`2px solid ${T.goldL}` }}>
+          <div style={{ fontSize:13, fontWeight:800, color:T.ink, marginBottom:12 }}>
+            📅 تفاصيل {selectedDay} ({selectedBks.length} حجز)
           </div>
-        ))}
-      </div>
-    </Card>
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {selectedBks.map(bk => (
+              <div key={bk.id} style={{ background:T.cream, borderRadius:10, padding:"10px 12px" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{bk.client_name}</div>
+                  <div style={{ fontSize:13, fontWeight:800, color:T.gold }}>{bk.total_amount || 0} ر.س</div>
+                </div>
+                <div style={{ fontSize:11, color:T.inkSoft }}>
+                  ⏰ {bk.appointment_time} · {bk.service_name || "خدمة"}
+                </div>
+                <div style={{ fontSize:11, color:T.inkSoft }}>
+                  {STATUS[bk.status] || bk.status}
+                  {bk.created_at && ` · حُجز: ${new Date(bk.created_at).toLocaleDateString("ar-SA")}`}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop:10, padding:"10px 12px", background:T.white, borderRadius:10, display:"flex", justifyContent:"space-between" }}>
+            <span style={{ fontSize:12, fontWeight:700, color:T.ink }}>إيرادات اليوم</span>
+            <span style={{ fontSize:14, fontWeight:900, color:T.gold }}>
+              {selectedBks.filter(b => b.status==="completed").reduce((s,b) => s+(b.total_amount||0), 0)} ر.س
+            </span>
+          </div>
+        </Card>
+      )}
+    </div>
   )
 }
 
@@ -2354,6 +2401,7 @@ function OwnerOverview() {
         </div>
       </Card>
       <MonthlyChart salonId={ownerStats.salonId} />
+      <SalesChart salonId={ownerStats.salonId} />
 
       <Card style={{ padding:16 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
