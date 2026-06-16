@@ -1886,6 +1886,9 @@ function OwnerBookings() {
               <div style={{ fontSize:12, color:T.inkSoft, marginBottom:4 }}>
                 {bk.booking_type === "offer" ? "🏷️ عرض خاص" : bk.booking_type === "package" ? "🎁 باقة" : "✂️ خدمة"} {bk.service_name && `· ${bk.service_name}`}
               </div>
+              <div style={{ fontSize:11, color:T.inkMuted, marginBottom:2 }}>
+                🕐 تاريخ الحجز: {bk.created_at ? new Date(bk.created_at).toLocaleDateString('ar-SA') : "—"}
+              </div>
               <div style={{ fontSize:12, color:T.inkSoft, marginBottom:8 }}>
                 📞 {bk.client_phone} · 📅 {bk.appointment_date} · ⏰ {bk.appointment_time}
               </div>
@@ -1984,50 +1987,102 @@ function DetailModal({ type, bookings, today, onClose }) {
 
 function MonthlyChart({ salonId }) {
   const [data, setData] = useState([])
+  const [allBks, setAllBks] = useState([])
+  const [selectedMonth, setSelectedMonth] = useState(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!salonId) return
-    supabase.from('bookings').select('appointment_date,total_amount,status')
+    if (!salonId) { setLoading(false); return }
+    supabase.from('bookings')
+      .select('*')
       .eq('salon_id', salonId)
-      .eq('status', 'completed')
+      .order('appointment_date', { ascending: false })
       .then(({ data: bks }) => {
-        if (!bks) return
+        if (!bks) { setLoading(false); return }
+        setAllBks(bks)
         const months = {}
         const now = new Date()
         for (let i = 5; i >= 0; i--) {
           const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
           const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
-          const label = d.toLocaleDateString('ar-SA', { month:'short' })
-          months[key] = { label, revenue:0, count:0 }
+          const label = d.toLocaleDateString('ar-SA', { month:'short', year:'2-digit' })
+          months[key] = { key, label, revenue:0, count:0 }
         }
         bks.forEach(b => {
           const key = (b.appointment_date || "").slice(0,7)
           if (months[key]) {
-            months[key].revenue += b.total_amount || 0
+            if (b.status === 'completed') months[key].revenue += b.total_amount || 0
             months[key].count++
           }
         })
         setData(Object.values(months))
+        setLoading(false)
       })
   }, [salonId])
 
-  if (data.length === 0) return null
+  if (loading) return <Card style={{ padding:16, marginBottom:14 }}><div style={{ textAlign:"center", color:T.inkSoft }}>...جاري التحميل</div></Card>
+  if (data.length === 0 || data.every(d => d.count === 0)) return null
+
   const maxRev = Math.max(...data.map(d => d.revenue), 1)
+  const selectedBks = selectedMonth ? allBks.filter(b => (b.appointment_date||"").startsWith(selectedMonth)) : []
+
+  const STATUS = { pending:"انتظار", confirmed:"مؤكد", completed:"مكتمل", cancelled:"ملغي" }
 
   return (
-    <Card style={{ padding:16, marginBottom:14 }}>
-      <div style={{ fontSize:14, fontWeight:800, color:T.ink, marginBottom:14 }}>📈 الإيرادات — آخر 6 أشهر</div>
-      <div style={{ display:"flex", alignItems:"flex-end", gap:6, height:100 }}>
-        {data.map((d, i) => (
-          <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
-            <div style={{ fontSize:9, color:T.inkSoft, marginBottom:2 }}>{d.revenue > 0 ? d.revenue : ""}</div>
-            <div style={{ width:"100%", height: Math.max((d.revenue/maxRev)*80, 4), background:d.revenue > 0 ? `linear-gradient(180deg,${T.roseDp},${T.rose})` : T.creamDk, borderRadius:"4px 4px 0 0", transition:"height .5s" }} />
-            <div style={{ fontSize:9, color:T.inkSoft }}>{d.label}</div>
-            {d.count > 0 && <div style={{ fontSize:8, color:T.roseDp, fontWeight:700 }}>{d.count} حجز</div>}
+    <div>
+      <Card style={{ padding:16, marginBottom:14 }}>
+        <div style={{ fontSize:14, fontWeight:800, color:T.ink, marginBottom:4 }}>📈 الإيرادات — آخر 6 أشهر</div>
+        <div style={{ fontSize:11, color:T.inkSoft, marginBottom:14 }}>اضغط على الشهر لعرض تفاصيله</div>
+        <div style={{ display:"flex", alignItems:"flex-end", gap:6, height:110 }}>
+          {data.map((d, i) => (
+            <div key={i} onClick={() => setSelectedMonth(selectedMonth === d.key ? null : d.key)}
+              style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:3, cursor:"pointer" }}>
+              <div style={{ fontSize:9, color:T.roseDp, fontWeight:700 }}>{d.revenue > 0 ? d.revenue+"ر" : ""}</div>
+              <div style={{ width:"100%", height: Math.max((d.revenue/maxRev)*80, d.count > 0 ? 8 : 4),
+                background: selectedMonth === d.key ? T.roseDp : d.revenue > 0 ? `linear-gradient(180deg,${T.rose},${T.roseL})` : T.creamDk,
+                borderRadius:"6px 6px 0 0", transition:"all .3s",
+                border: selectedMonth === d.key ? `2px solid ${T.roseDp}` : "none"
+              }} />
+              <div style={{ fontSize:9, color: selectedMonth === d.key ? T.roseDp : T.inkSoft, fontWeight: selectedMonth === d.key ? 700 : 400 }}>{d.label}</div>
+              {d.count > 0 && <div style={{ fontSize:8, color:T.inkSoft }}>{d.count}</div>}
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* تفاصيل الشهر المختار */}
+      {selectedMonth && selectedBks.length > 0 && (
+        <Card style={{ padding:16, marginBottom:14, border:`2px solid ${T.roseL}` }}>
+          <div style={{ fontSize:13, fontWeight:800, color:T.ink, marginBottom:12 }}>
+            تفاصيل {data.find(d => d.key === selectedMonth)?.label} ({selectedBks.length} حجز)
           </div>
-        ))}
-      </div>
-    </Card>
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {selectedBks.map(bk => (
+              <div key={bk.id} style={{ background:T.cream, borderRadius:10, padding:"10px 12px" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{bk.client_name}</div>
+                  <div style={{ fontSize:13, fontWeight:800, color:T.roseDp }}>{bk.total_amount || 0} ر.س</div>
+                </div>
+                <div style={{ fontSize:11, color:T.inkSoft }}>
+                  📅 {bk.appointment_date} · ⏰ {bk.appointment_time}
+                </div>
+                <div style={{ fontSize:11, color:T.inkSoft }}>
+                  {bk.service_name && `✂️ ${bk.service_name} · `}
+                  {STATUS[bk.status] || bk.status}
+                  {bk.created_at && ` · حُجز: ${new Date(bk.created_at).toLocaleDateString('ar-SA')}`}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop:12, padding:"10px 12px", background:T.white, borderRadius:10, display:"flex", justifyContent:"space-between" }}>
+            <span style={{ fontSize:12, fontWeight:700, color:T.ink }}>إجمالي الإيرادات</span>
+            <span style={{ fontSize:14, fontWeight:900, color:T.roseDp }}>
+              {selectedBks.filter(b => b.status==="completed").reduce((s,b) => s+(b.total_amount||0), 0)} ر.س
+            </span>
+          </div>
+        </Card>
+      )}
+    </div>
   )
 }
 
@@ -2108,7 +2163,7 @@ function OwnerRecentBookings({ stats }) {
 function OwnerOverview() {
   const MONTHS = ["يناير","فبراير","مارس","أبريل","مايو","يونيو"]
   const BARS = [70,85,60,90,75,100]
-  const [ownerStats, setOwnerStats] = useState({ revenue:0, todayBookings:0, totalBookings:0, clients:0 })
+  const [ownerStats, setOwnerStats] = useState({ revenue:0, todayBookings:0, totalBookings:0, clients:0, salonId:null })
   const [detailModal, setDetailModal] = useState(null)
   const [allBookings, setAllBookings] = useState([])
   const [statsLoaded, setStatsLoaded] = useState(false)
@@ -2175,6 +2230,8 @@ function OwnerOverview() {
           ))}
         </div>
       </Card>
+      <MonthlyChart salonId={ownerStats.salonId} />
+
       <Card style={{ padding:16 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
           <div style={{ fontSize:14, fontWeight:800, color:T.ink }}>آخر الحجوزات</div>
