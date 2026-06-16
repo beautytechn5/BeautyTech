@@ -1249,6 +1249,20 @@ const OWN_TABS = [
 function OwnerDashboard({ setScreen }) {
   const toast = useToast()
   const [tab, setTab] = useState("overview")
+  const [salonInfo, setSalonInfo] = useState({ name:"...", trial_end:null })
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return
+      supabase.from('salons').select('name,trial_end,city').eq('email', session.user.email).then(({ data }) => {
+        if (data && data[0]) setSalonInfo(data[0])
+      })
+    })
+  }, [])
+
+  const daysLeft = salonInfo.trial_end
+    ? Math.max(0, Math.ceil((new Date(salonInfo.trial_end) - new Date()) / (1000*60*60*24)))
+    : 14
 
   return (
     <div style={{ background:T.cream, minHeight:"100vh" }}>
@@ -1257,8 +1271,8 @@ function OwnerDashboard({ setScreen }) {
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           <div style={{ width:36, height:36, borderRadius:"50%", background:`linear-gradient(135deg,${T.roseL},${T.goldPale})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>💅</div>
           <div>
-            <div style={{ fontSize:13, fontWeight:800, color:T.ink }}>اسم الصالون</div>
-            <div style={{ fontSize:11, color:T.roseDp, fontWeight:700 }}>🎁 تجربة مجانية — باقي 11 يوم</div>
+            <div style={{ fontSize:13, fontWeight:800, color:T.ink }}>{salonInfo.name}</div>
+            <div style={{ fontSize:11, color:T.roseDp, fontWeight:700 }}>🎁 تجربة مجانية — باقي {daysLeft} يوم</div>
           </div>
         </div>
         <button onClick={() => { toast("👋 تم تسجيل الخروج"); setScreen("owner-login") }}
@@ -1271,13 +1285,13 @@ function OwnerDashboard({ setScreen }) {
       <div style={{ background:"linear-gradient(135deg,#FFF8F5,#FFF3E8)", borderBottom:`1px solid ${T.roseL}`, padding:"10px 18px" }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
           <div style={{ fontSize:12, fontWeight:700, color:T.roseDp }}>🎁 تجربة مجانية — 14 يوم</div>
-          <div style={{ fontSize:11, color:T.inkSoft }}>اليوم الأول من التجربة</div>
+          <div style={{ fontSize:11, color:T.inkSoft }}>مضى {14 - daysLeft} يوم من 14</div>
         </div>
         <div style={{ background:T.roseL, borderRadius:50, height:6, overflow:"hidden" }}>
-          <div style={{ width:"2%", height:"100%", borderRadius:50, background:`linear-gradient(90deg,${T.rose},${T.roseDp})`, transition:"width .3s" }} />
+          <div style={{ width:`${((14-daysLeft)/14)*100}%`, height:"100%", borderRadius:50, background:`linear-gradient(90deg,${T.rose},${T.roseDp})`, transition:"width .3s" }} />
         </div>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:6 }}>
-          <div style={{ fontSize:11, color:T.inkSoft }}>باقي 14 يوم على انتهاء التجربة</div>
+          <div style={{ fontSize:11, color:T.inkSoft }}>باقي {daysLeft} يوم على انتهاء التجربة</div>
           <button onClick={() => toast("💳 تواصلي معنا على واتساب 0552401658 للاشتراك")}
             style={{ fontSize:11, fontWeight:700, color:T.white, background:T.roseDp, border:"none", padding:"4px 12px", borderRadius:20, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
             اشتركي الآن
