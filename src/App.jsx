@@ -2929,11 +2929,25 @@ function OwnerSettings({ toast }) {
                 style={{ position:"absolute", top:4, left:4, width:20, height:20, borderRadius:"50%", background:T.red, border:"none", color:"#fff", fontSize:10, cursor:"pointer" }}>✕</button>
             </div>
           ))}
-          <button onClick={() => { setPhotos(p => [...p, "new"]); toast("📷 رفع الصور سيتوفر بعد ربط Supabase") }}
-            style={{ aspectRatio:"1", background:T.cream, borderRadius:10, border:`2px dashed ${T.roseL}`, cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:4 }}>
+          <label style={{ aspectRatio:"1", background:T.cream, borderRadius:10, border:`2px dashed ${T.roseL}`, cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:4 }}>
             <span style={{ fontSize:22 }}>+</span>
             <span style={{ fontSize:10, color:T.inkSoft }}>إضافة صورة</span>
-          </button>
+            <input type="file" accept="image/*" style={{ display:"none" }} onChange={async (e) => {
+              const file = e.target.files[0]
+              if (!file || !salonId) return
+              setUploading(true)
+              const ext = file.name.split('.').pop()
+              const path = `salons/${salonId}_${Date.now()}.${ext}`
+              const { error } = await supabase.storage.from('salon-images').upload(path, file, { upsert:true })
+              if (error) { toast("⚠ فشل الرفع"); setUploading(false); return }
+              const { data: urlData } = supabase.storage.from('salon-images').getPublicUrl(path)
+              const url = urlData.publicUrl
+              setForm(f => ({ ...f, imageUrl: url }))
+              await supabase.from('salons').update({ image_url: url }).eq('id', salonId)
+              setUploading(false)
+              toast("✅ تم رفع الصورة!")
+            }} />
+          </label>
         </div>
       </Card>
 
