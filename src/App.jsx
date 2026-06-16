@@ -881,8 +881,8 @@ function BookingPage({ salon, setScreen }) {
 
   return (
     <div style={{ background:T.cream, minHeight:"100vh", paddingBottom:40 }}>
-      <TermsModal open={termsOpen} onClose={() => setTermsOpen(false)} />
-      {/* Header */}
+      <TermsModal open={termsOpen} onClose={() => setTermsOpen(false)} type="salon-client" />
+      {/* Header */
       <div style={{ background:T.white, borderBottom:`1px solid ${T.roseL}`, padding:"14px 20px", display:"flex", alignItems:"center", gap:12, position:"sticky", top:0, zIndex:100 }}>
         <button onClick={() => setScreen("client-home")} style={{ width:36, height:36, borderRadius:"50%", border:"none", background:T.cream, cursor:"pointer", fontSize:16 }}>←</button>
         <div>
@@ -1128,6 +1128,7 @@ function OwnerRegister({ setScreen }) {
   const [agreed, setAgreed] = useState(false)
   const [loading, setLoading] = useState(false)
   const [termsOpen, setTermsOpen] = useState(false)
+  const [termsType, setTermsType] = useState("platform-salon")
   const [focusCity, setFocusCity] = useState(false)
   const [salonId, setSalonId] = useState(null)
   const [services, setServices] = useState([{ name:"", price:"" }])
@@ -3796,6 +3797,7 @@ function AdminDashboard({ setScreen }) {
   const [stats, setStats] = useState({ salons:0, clients:0, bookings:0 })
   const [salonsList, setSalonsList] = useState([])
   const [pkgStats, setPkgStats] = useState({ basic:0, pro:0, elite:0 })
+  const [adminModal, setAdminModal] = useState(null)
 
   useEffect(() => {
     if (!auth) return
@@ -3803,7 +3805,7 @@ function AdminDashboard({ setScreen }) {
     supabase.from('salons').select('*').then(({ data }) => {
       if (data) {
         setStats(s => ({ ...s, salons: data.length }))
-        setSalonsList(data)
+        setSalonsList(data || [])
         setPkgStats({
           basic:  data.filter(s => s.package === 'basic').length,
           pro:    data.filter(s => s.package === 'pro').length,
@@ -3885,23 +3887,94 @@ function AdminDashboard({ setScreen }) {
           <div>
             {/* أرقام رئيسية */}
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
-              <Card style={{ padding:16, background:`linear-gradient(135deg,${T.gold},${T.gold2})`, textAlign:"center" }}>
-                <div style={{ fontSize:32, fontWeight:900, color:T.white }}>{stats.salons}</div>
-                <div style={{ fontSize:11, color:"rgba(255,255,255,.8)", fontWeight:600, marginTop:5 }}>🏪 صالون مسجّل</div>
-              </Card>
-              <Card style={{ padding:16, textAlign:"center" }}>
-                <div style={{ fontSize:32, fontWeight:900, color:T.roseDp }}>{stats.clients}</div>
-                <div style={{ fontSize:11, color:T.inkSoft, fontWeight:600, marginTop:5 }}>👤 عميلة مسجّلة</div>
-              </Card>
-              <Card style={{ padding:16, textAlign:"center" }}>
-                <div style={{ fontSize:32, fontWeight:900, color:T.roseDp }}>{stats.bookings}</div>
-                <div style={{ fontSize:11, color:T.inkSoft, fontWeight:600, marginTop:5 }}>📅 حجز إجمالي</div>
-              </Card>
-              <Card style={{ padding:16, background:`linear-gradient(135deg,${T.roseDp},#7A4830)`, textAlign:"center" }}>
-                <div style={{ fontSize:24, fontWeight:900, color:T.white }}>{monthlyRevenue.toLocaleString()}</div>
-                <div style={{ fontSize:10, color:"rgba(255,255,255,.8)", fontWeight:600, marginTop:5 }}>💰 إيرادات الاشتراكات/شهر</div>
-              </Card>
+              {[
+                { label:"🏪 صالون مسجّل", value:stats.salons, gold:true, key:"salons" },
+                { label:"👤 عميلة مسجّلة", value:stats.clients, key:"clients" },
+                { label:"📅 حجز إجمالي", value:stats.bookings, key:"bookings" },
+                { label:"🎁 في التجربة", value:salonsList.filter(s => s.trial_end && new Date(s.trial_end) > new Date()).length, key:"trial" },
+                { label:"✅ انتهت تجربتهم", value:salonsList.filter(s => s.trial_end && new Date(s.trial_end) < new Date()).length, key:"trial_done" },
+                { label:"💰 إيرادات/شهر", value:monthlyRevenue.toLocaleString()+" ر.س", key:"revenue", gold2:true },
+              ].map(st => (
+                <div key={st.key} onClick={() => setAdminModal(st.key)}
+                  style={{ padding:14, borderRadius:16, background:st.gold ? `linear-gradient(135deg,${T.gold},${T.gold2})` : st.gold2 ? `linear-gradient(135deg,${T.roseDp},#7A4830)` : T.white, textAlign:"center", cursor:"pointer", boxShadow:"0 2px 8px rgba(44,32,24,.08)" }}>
+                  <div style={{ fontSize:22, fontWeight:900, color:st.gold||st.gold2 ? T.white : T.roseDp }}>{st.value}</div>
+                  <div style={{ fontSize:10, color:st.gold||st.gold2 ? "rgba(255,255,255,.8)" : T.inkSoft, fontWeight:600, marginTop:4 }}>{st.label}</div>
+                  <div style={{ fontSize:9, color:st.gold||st.gold2 ? "rgba(255,255,255,.5)" : T.inkMuted, marginTop:3 }}>← تفاصيل</div>
+                </div>
+              ))}
             </div>
+
+            {/* Modal التفاصيل */}
+            {adminModal && (
+              <div onClick={() => setAdminModal(null)} style={{ position:"fixed", inset:0, background:"rgba(44,32,24,.5)", zIndex:3000, display:"flex", alignItems:"flex-end" }}>
+                <div onClick={e => e.stopPropagation()} style={{ background:T.white, borderRadius:"24px 24px 0 0", width:"100%", maxHeight:"80vh", overflow:"hidden", display:"flex", flexDirection:"column" }}>
+                  <div style={{ padding:"16px 20px", borderBottom:`1px solid ${T.creamDk}`, display:"flex", justifyContent:"space-between" }}>
+                    <div style={{ fontSize:15, fontWeight:800, color:T.ink }}>
+                      {adminModal==="salons" ? "🏪 الصالونات المسجّلة" : adminModal==="clients" ? "👤 العملاء" : adminModal==="bookings" ? "📅 الحجوزات" : adminModal==="trial" ? "🎁 في التجربة المجانية" : adminModal==="trial_done" ? "✅ انتهت تجربتهم" : "💰 الإيرادات"}
+                    </div>
+                    <button onClick={() => setAdminModal(null)} style={{ width:28, height:28, borderRadius:"50%", border:"none", background:T.cream, cursor:"pointer" }}>✕</button>
+                  </div>
+                  <div style={{ overflowY:"auto", padding:"14px 20px", flex:1 }}>
+                    {adminModal==="salons" && salonsList.map((s,i) => (
+                      <div key={i} style={{ padding:"10px 0", borderBottom:`1px solid ${T.creamDk}`, display:"flex", justifyContent:"space-between" }}>
+                        <div>
+                          <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{s.name}</div>
+                          <div style={{ fontSize:11, color:T.inkSoft }}>{s.email} · {s.city}</div>
+                          <div style={{ fontSize:11, color:T.inkSoft }}>{s.phone}</div>
+                        </div>
+                        <span style={{ fontSize:10, background:T.roseL, color:T.roseDp, padding:"3px 8px", borderRadius:20, height:"fit-content", fontWeight:700 }}>
+                          {s.package === "elite" ? "نخبة" : s.package === "pro" ? "توسع" : "أساسية"}
+                        </span>
+                      </div>
+                    ))}
+                    {adminModal==="trial" && salonsList.filter(s => s.trial_end && new Date(s.trial_end) > new Date()).map((s,i) => (
+                      <div key={i} style={{ padding:"10px 0", borderBottom:`1px solid ${T.creamDk}`, display:"flex", justifyContent:"space-between" }}>
+                        <div>
+                          <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{s.name}</div>
+                          <div style={{ fontSize:11, color:T.inkSoft }}>{s.phone} · {s.city}</div>
+                        </div>
+                        <div style={{ fontSize:11, color:T.green, fontWeight:700 }}>
+                          باقي {Math.ceil((new Date(s.trial_end)-new Date())/(1000*60*60*24))} يوم
+                        </div>
+                      </div>
+                    ))}
+                    {adminModal==="trial_done" && salonsList.filter(s => s.trial_end && new Date(s.trial_end) < new Date()).map((s,i) => (
+                      <div key={i} style={{ padding:"10px 0", borderBottom:`1px solid ${T.creamDk}`, display:"flex", justifyContent:"space-between" }}>
+                        <div>
+                          <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{s.name}</div>
+                          <div style={{ fontSize:11, color:T.inkSoft }}>{s.phone} · {s.email}</div>
+                        </div>
+                        <span style={{ fontSize:10, background:T.redL, color:T.red, padding:"3px 8px", borderRadius:20, fontWeight:700 }}>منتهية</span>
+                      </div>
+                    ))}
+                    {adminModal==="revenue" && (
+                      <div style={{ padding:"14px 0" }}>
+                        {[
+                          { name:"الأساسية", count:pkgStats.basic, price:200 },
+                          { name:"التوسع", count:pkgStats.pro, price:800 },
+                          { name:"النخبة", count:pkgStats.elite, price:1500 },
+                        ].map(p => (
+                          <div key={p.name} style={{ padding:"10px 0", borderBottom:`1px solid ${T.creamDk}`, display:"flex", justifyContent:"space-between" }}>
+                            <div>
+                              <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>باقة {p.name}</div>
+                              <div style={{ fontSize:11, color:T.inkSoft }}>{p.count} صالون × {p.price} ر.س</div>
+                            </div>
+                            <div style={{ fontSize:14, fontWeight:800, color:T.roseDp }}>{(p.count*p.price).toLocaleString()} ر.س</div>
+                          </div>
+                        ))}
+                        <div style={{ padding:"12px 0", display:"flex", justifyContent:"space-between", fontSize:15, fontWeight:800 }}>
+                          <span>الإجمالي</span>
+                          <span style={{ color:T.gold }}>{monthlyRevenue.toLocaleString()} ر.س/شهر</span>
+                        </div>
+                        <div style={{ fontSize:12, color:T.inkSoft, background:T.goldPale, borderRadius:10, padding:"10px 12px", marginTop:8 }}>
+                          💡 رسوم التأسيس المتوقعة: {(stats.salons*600).toLocaleString()} ر.س
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* توزيع الباقات */}
             <Card style={{ padding:16, marginBottom:14 }}>
@@ -3922,25 +3995,9 @@ function AdminDashboard({ setScreen }) {
                   <div style={{ background:T.creamDk, borderRadius:50, height:6, overflow:"hidden" }}>
                     <div style={{ width: stats.salons > 0 ? `${(p.count/stats.salons)*100}%` : "0%", height:"100%", background:p.color, borderRadius:50, transition:"width .5s" }} />
                   </div>
-                  <div style={{ fontSize:11, color:T.inkSoft, marginTop:3, textAlign:"left" }}>
-                    إيراد: {(p.count * p.price).toLocaleString()} ر.س/شهر
-                  </div>
                 </div>
               ))}
-              <div style={{ borderTop:`1px solid ${T.creamDk}`, paddingTop:12, marginTop:4 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", fontSize:13 }}>
-                  <span style={{ fontWeight:700, color:T.ink }}>إجمالي الاشتراكات</span>
-                  <span style={{ fontWeight:900, color:T.roseDp }}>{monthlyRevenue.toLocaleString()} ر.س/شهر</span>
-                </div>
-              </div>
             </Card>
-
-            {/* رسوم التأسيس */}
-            <div style={{ background:T.goldPale, border:`1px solid ${T.goldL}`, borderRadius:14, padding:"14px 16px" }}>
-              <div style={{ fontSize:13, fontWeight:700, color:T.ink, marginBottom:4 }}>💡 رسوم التأسيس المتوقعة</div>
-              <div style={{ fontSize:20, fontWeight:900, color:T.gold }}>{(stats.salons * 600).toLocaleString()} ر.س</div>
-              <div style={{ fontSize:12, color:T.inkSoft, marginTop:4 }}>{stats.salons} صالون × 600 ر.س</div>
-            </div>
           </div>
         )}
 
