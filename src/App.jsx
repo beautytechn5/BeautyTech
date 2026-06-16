@@ -882,7 +882,7 @@ function BookingPage({ salon, setScreen }) {
   return (
     <div style={{ background:T.cream, minHeight:"100vh", paddingBottom:40 }}>
       <TermsModal open={termsOpen} onClose={() => setTermsOpen(false)} type="salon-client" />
-      {/* Header */
+      {/* Header */}
       <div style={{ background:T.white, borderBottom:`1px solid ${T.roseL}`, padding:"14px 20px", display:"flex", alignItems:"center", gap:12, position:"sticky", top:0, zIndex:100 }}>
         <button onClick={() => setScreen("client-home")} style={{ width:36, height:36, borderRadius:"50%", border:"none", background:T.cream, cursor:"pointer", fontSize:16 }}>←</button>
         <div>
