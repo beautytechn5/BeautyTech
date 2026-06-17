@@ -108,7 +108,6 @@ function TermsModal({ open, onClose }) {
     { t:"٢. الحجز والعربون", b:"يُشترط دفع عربون 30% عند الحجز. العربون غير مسترد عند الإلغاء، ويُخصم من الفاتورة النهائية." },
     { t:"٣. تعديل المواعيد", b:"يحق للعميلة تعديل موعدها مرة واحدة فقط قبل 24 ساعة من الموعد." },
     { t:"٤. الخصوصية", b:"تلتزم المنصة بحماية بيانات المستخدمين وعدم مشاركتها مع أطراف ثالثة." },
-    { t:"٥. إلغاء الاشتراك", b:"رسوم الاشتراك المدفوعة غير مستردة. رسوم التأسيس 600 ر.س غير مستردة في جميع الأحوال." },
   ]
   return (
     <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(44,32,24,.5)", zIndex:3000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
@@ -5341,6 +5340,7 @@ function GiftPage({ setScreen }) {
   const send = async () => {
     if (!recipientName || !recipientPhone || !senderName) { toast("⚠ أكملي البيانات"); return }
     setSending(true)
+    const waWindow = window.open("", "_blank")
     const { error } = await supabase.from('vouchers').insert([{
       code: voucherCode,
       amount: amount,
@@ -5351,14 +5351,20 @@ function GiftPage({ setScreen }) {
       status: 'active',
     }])
     setSending(false)
-    if (error) { toast("⚠ حدث خطأ: " + error.message); return }
+    if (error) {
+      if (waWindow) waWindow.close()
+      toast("⚠ حدث خطأ: " + error.message)
+      return
+    }
     const waNum = recipientPhone.replace(/^0/, "").replace(/[^0-9]/g, "")
     const waText = "🌸 لديكِ قسيمة هدية من " + senderName + "!\n\n" +
       "القيمة: " + amount + " ر.س\n" +
       "الكود: " + voucherCode + "\n" +
       (msg ? ("\n" + msg + "\n") : "") +
       "\nاستخدميها في أي صالون على منصة بيوتي تيك 🌸"
-    window.open("https://wa.me/966" + waNum + "?text=" + encodeURIComponent(waText), "_blank")
+    const waUrl = "https://wa.me/966" + waNum + "?text=" + encodeURIComponent(waText)
+    if (waWindow) waWindow.location.href = waUrl
+    else window.open(waUrl, "_blank")
     setStep(3)
   }
 
