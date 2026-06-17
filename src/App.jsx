@@ -649,24 +649,29 @@ function ClientHome({ setScreen, setSalon }) {
                   </div>
                 </div>
                 {/* Time slots visual */}
-                <div style={{ marginBottom:14 }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:T.inkSoft, marginBottom:6 }}>الأوقات المتاحة</div>
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
-                    {[
-                      { id:"morning",   icon:"🌅", label:"صباح",  available:true },
-                      { id:"afternoon", icon:"☀️",  label:"ظهيرة", available:true },
-                      { id:"evening",   icon:"🌙", label:"مساء",  available:false },
-                    ].map(sl => (
-                      <div key={sl.id} style={{ padding:"8px 6px", borderRadius:10, background:sl.available ? T.greenL : T.creamDk, textAlign:"center", opacity:sl.available ? 1 : .5 }}>
-                        <div style={{ fontSize:16 }}>{sl.icon}</div>
-                        <div style={{ fontSize:10, fontWeight:600, color:sl.available ? T.green : T.inkMuted, marginTop:2 }}>{sl.label}</div>
-                        <div style={{ fontSize:9, color:sl.available ? T.green : T.inkMuted }}>
-                          {sl.available ? "متاح" : "محجوز"}
-                        </div>
+                {(() => {
+                  const avail = getTimeSlotsAvailability(s.services)
+                  return (
+                    <div style={{ marginBottom:14 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:T.inkSoft, marginBottom:6 }}>الأوقات المتاحة</div>
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
+                        {[
+                          { id:"morning",   icon:"🌅", label:"صباح",  available:avail.morning },
+                          { id:"afternoon", icon:"☀️",  label:"ظهيرة", available:avail.afternoon },
+                          { id:"evening",   icon:"🌙", label:"مساء",  available:avail.evening },
+                        ].map(sl => (
+                          <div key={sl.id} style={{ padding:"8px 6px", borderRadius:10, background:sl.available ? T.greenL : T.creamDk, textAlign:"center", opacity:sl.available ? 1 : .5 }}>
+                            <div style={{ fontSize:16 }}>{sl.icon}</div>
+                            <div style={{ fontSize:10, fontWeight:600, color:sl.available ? T.green : T.inkMuted, marginTop:2 }}>{sl.label}</div>
+                            <div style={{ fontSize:9, color:sl.available ? T.green : T.inkMuted }}>
+                              {sl.available ? "متاح" : "محجوز"}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </div>
+                    </div>
+                  )
+                })()}
                 {/* Actions */}
                 <div style={{ display:"flex", gap:8, marginBottom:8 }}>
                   <PBtn full onClick={() => { setSalon(s); setScreen("booking") }}>احجزي الآن</PBtn>
