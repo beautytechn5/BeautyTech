@@ -1335,7 +1335,13 @@ function ClientLogin({ setScreen }) {
         <Field label="البريد الإلكتروني أو رقم الجوال" placeholder="example@email.com أو 05xxxxxxxx" value={form.emailOrPhone} onChange={set("emailOrPhone")} />
         <Field label="كلمة المرور" type="password" placeholder="••••••••" value={form.pass} onChange={set("pass")} />
         <div style={{ textAlign:"left", marginBottom:18 }}>
-          <span style={{ fontSize:13, color:T.roseDp, fontWeight:600, cursor:"pointer" }}>نسيتِ كلمة المرور؟</span>
+          <span onClick={async () => {
+            const email = form.emailOrPhone
+            if (!email || !email.includes("@")) { toast("⚠ أدخلي بريدك الإلكتروني في الحقل أعلاه لاستعادة كلمة المرور"); return }
+            const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin })
+            if (error) { toast("⚠ " + error.message); return }
+            toast("✅ تم إرسال رابط استعادة كلمة المرور إلى بريدك")
+          }} style={{ fontSize:13, color:T.roseDp, fontWeight:600, cursor:"pointer" }}>نسيتِ كلمة المرور؟</span>
         </div>
         <PBtn full disabled={loading} onClick={submit}>{loading ? "..." : "دخول →"}</PBtn>
         <div style={{ textAlign:"center", marginTop:18, fontSize:13, color:T.inkSoft }}>
@@ -1804,7 +1810,12 @@ function OwnerLogin({ setScreen }) {
         <Field label="البريد الإلكتروني" type="email" placeholder="salon@email.com" value={form.email} onChange={set("email")} />
         <Field label="كلمة المرور" type="password" placeholder="••••••••" value={form.pass} onChange={set("pass")} />
         <div style={{ textAlign:"left", marginBottom:18 }}>
-          <span style={{ fontSize:13, color:T.roseDp, fontWeight:600, cursor:"pointer" }}>نسيتِ كلمة المرور؟</span>
+          <span onClick={async () => {
+            if (!form.email) { toast("⚠ أدخلي بريدك الإلكتروني أولاً"); return }
+            const { error } = await supabase.auth.resetPasswordForEmail(form.email, { redirectTo: window.location.origin })
+            if (error) { toast("⚠ " + error.message); return }
+            toast("✅ تم إرسال رابط استعادة كلمة المرور إلى بريدك")
+          }} style={{ fontSize:13, color:T.roseDp, fontWeight:600, cursor:"pointer" }}>نسيتِ كلمة المرور؟</span>
         </div>
         <PBtn full disabled={loading} onClick={submit}>{loading ? "..." : "دخول لوحة التحكم →"}</PBtn>
         <div style={{ textAlign:"center", marginTop:18, fontSize:13, color:T.inkSoft }}>
@@ -1873,7 +1884,7 @@ function OwnerDashboard({ setScreen }) {
             style={{ padding:"7px 14px", borderRadius:50, border:`1px solid ${T.roseL}`, background:T.roseL, color:T.roseDp, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
             🏠 الرئيسية
           </button>
-          <button onClick={() => { toast("👋 تم تسجيل الخروج"); setScreen("owner-login") }}
+          <button onClick={async () => { await supabase.auth.signOut(); toast("👋 تم تسجيل الخروج"); setScreen("owner-login") }}
             style={{ padding:"7px 14px", borderRadius:50, border:`1px solid ${T.roseL}`, background:T.white, color:T.inkSoft, fontSize:12, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
             خروج
           </button>
@@ -1954,6 +1965,15 @@ function OwnerBookings() {
   const [bookings, setBookings] = useState([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState("active")
+  const [salonId, setSalonId] = useState(null)
+  const [showVoucher, setShowVoucher] = useState(false)
+  const [voucherCode, setVoucherCode] = useState("")
+  const [voucherFound, setVoucherFound] = useState(null)
+  const [voucherSearching, setVoucherSearching] = useState(false)
+  const [voucherClientName, setVoucherClientName] = useState("")
+  const [voucherClientPhone, setVoucherClientPhone] = useState("")
+  const [voucherServiceName, setVoucherServiceName] = useState("")
+  const [voucherRedeeming, setVoucherRedeeming] = useState(false)
   const toast = useToast()
 
   useEffect(() => {
@@ -1963,16 +1983,74 @@ function OwnerBookings() {
       // جلب بيانات الصالون أولاً
       const { data: salonData } = await supabase.from('salons').select('id').eq('email', session.user.email)
       if (!salonData || salonData.length === 0) { setLoading(false); return }
-      const salonId = salonData[0].id
+      const sid = salonData[0].id
+      setSalonId(sid)
       const { data } = await supabase.from('bookings')
         .select('*')
-        .eq('salon_id', salonId)
+        .eq('salon_id', sid)
         .order('appointment_date', { ascending: true })
       setBookings(data || [])
       setLoading(false)
     }
     load()
   }, [])
+
+  const searchVoucher = async () => {
+    if (!voucherCode) { toast("⚠ أدخلي كود القسيمة"); return }
+    setVoucherSearching(true)
+    const { data, error } = await supabase.from('vouchers').select('*').eq('code', voucherCode.trim().toUpperCase()).eq('status', 'active')
+    setVoucherSearching(false)
+    if (error || !data || data.length === 0) { toast("⚠ الكود غير صحيح أو مستخدم من قبل"); setVoucherFound(null); return }
+    setVoucherFound(data[0])
+    setVoucherClientName(data[0].recipient_name || "")
+    setVoucherClientPhone(data[0].recipient_phone || "")
+    toast("✅ تم العثور على القسيمة!")
+  }
+
+  const redeemVoucher = async () => {
+    if (!voucherFound || !salonId) return
+    if (!voucherClientName || !voucherClientPhone) { toast("⚠ أكملي بيانات العميلة"); return }
+    setVoucherRedeeming(true)
+    const amount = voucherFound.amount
+    const fee = Math.round(amount * 0.05)
+    const net = amount - fee
+    const today = new Date().toISOString().split('T')[0]
+    const now = new Date()
+    const time = String(now.getHours()).padStart(2,'0') + ":" + String(now.getMinutes()).padStart(2,'0')
+
+    const { error: bkError } = await supabase.from('bookings').insert([{
+      salon_id: salonId,
+      client_name: voucherClientName,
+      client_phone: voucherClientPhone,
+      appointment_date: today,
+      appointment_time: time,
+      total_amount: amount,
+      deposit_amount: amount,
+      platform_fee: fee,
+      salon_amount: net,
+      status: 'confirmed',
+      booking_type: 'voucher',
+      service_name: voucherServiceName || 'قسيمة هدية',
+    }])
+    if (bkError) { setVoucherRedeeming(false); toast("⚠ حدث خطأ: " + bkError.message); return }
+
+    await supabase.from('vouchers').update({
+      status: 'redeemed',
+      redeemed_by_salon_id: salonId,
+      redeemed_at: new Date().toISOString(),
+    }).eq('id', voucherFound.id)
+
+    setVoucherRedeeming(false)
+    setVoucherFound(null)
+    setVoucherCode("")
+    setVoucherClientName("")
+    setVoucherClientPhone("")
+    setVoucherServiceName("")
+    setShowVoucher(false)
+    toast("✅ تم تفعيل القسيمة! صافي مستحقاتك: " + net + " ر.س")
+    const { data } = await supabase.from('bookings').select('*').eq('salon_id', salonId).order('appointment_date', { ascending: true })
+    setBookings(data || [])
+  }
 
   const updateStatus = async (id, status) => {
     await supabase.from('bookings').update({ status }).eq('id', id)
@@ -1996,6 +2074,80 @@ function OwnerBookings() {
 
   return (
     <div>
+      {/* تفعيل قسيمة هدية */}
+      <div style={{ marginBottom:14 }}>
+        <button onClick={() => setShowVoucher(!showVoucher)}
+          style={{ width:"100%", padding:"12px 16px", borderRadius:14, border:`1.5px solid ${showVoucher ? T.green : T.greenL}`, background:showVoucher ? T.greenL : T.white, color:T.green, fontSize:13, fontWeight:800, cursor:"pointer", fontFamily:"Tajawal,sans-serif", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <span>🎟️ تفعيل قسيمة هدية من عميلة</span>
+          <span style={{ fontSize:11 }}>{showVoucher ? "▲" : "▼"}</span>
+        </button>
+
+        {showVoucher && (
+          <Card style={{ padding:16, marginTop:8, border:`2px solid ${T.greenL}` }}>
+            {!voucherFound ? (
+              <div>
+                <div style={{ fontSize:12, color:T.inkSoft, marginBottom:10 }}>أدخلي كود القسيمة الذي تحمله العميلة</div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <input value={voucherCode} onChange={e => setVoucherCode(e.target.value.toUpperCase())}
+                    placeholder="مثال: BT-XXXXXX"
+                    style={{ flex:1, padding:"10px 12px", border:`1.5px solid ${T.creamDk}`, borderRadius:10, fontSize:14, fontWeight:700, letterSpacing:1, color:T.ink, background:T.cream, outline:"none", fontFamily:"Tajawal,sans-serif" }} />
+                  <button onClick={searchVoucher} disabled={voucherSearching}
+                    style={{ padding:"0 18px", borderRadius:10, border:"none", background:T.green, color:T.white, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    {voucherSearching ? "..." : "بحث"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div style={{ background:T.greenL, borderRadius:12, padding:"12px 14px", marginBottom:14, textAlign:"center" }}>
+                  <div style={{ fontSize:11, color:T.inkSoft, marginBottom:4 }}>قيمة القسيمة</div>
+                  <div style={{ fontSize:26, fontWeight:900, color:T.green }}>{voucherFound.amount} ر.س</div>
+                  <div style={{ fontSize:11, color:T.inkSoft, marginTop:4 }}>من {voucherFound.sender_name}</div>
+                </div>
+                <div style={{ marginBottom:10 }}>
+                  <label style={{ fontSize:12, color:T.inkSoft, display:"block", marginBottom:5 }}>اسم العميلة *</label>
+                  <input value={voucherClientName} onChange={e => setVoucherClientName(e.target.value)}
+                    style={{ width:"100%", padding:"10px 12px", border:`1.5px solid ${T.creamDk}`, borderRadius:10, fontSize:13, color:T.ink, background:T.cream, outline:"none", fontFamily:"Tajawal,sans-serif" }} />
+                </div>
+                <div style={{ marginBottom:10 }}>
+                  <label style={{ fontSize:12, color:T.inkSoft, display:"block", marginBottom:5 }}>جوال العميلة *</label>
+                  <input value={voucherClientPhone} onChange={e => setVoucherClientPhone(e.target.value)}
+                    style={{ width:"100%", padding:"10px 12px", border:`1.5px solid ${T.creamDk}`, borderRadius:10, fontSize:13, color:T.ink, background:T.cream, outline:"none", fontFamily:"Tajawal,sans-serif" }} />
+                </div>
+                <div style={{ marginBottom:14 }}>
+                  <label style={{ fontSize:12, color:T.inkSoft, display:"block", marginBottom:5 }}>اسم الخدمة المقدَّمة (اختياري)</label>
+                  <input value={voucherServiceName} onChange={e => setVoucherServiceName(e.target.value)}
+                    placeholder="مثال: قص وصبغ شعر"
+                    style={{ width:"100%", padding:"10px 12px", border:`1.5px solid ${T.creamDk}`, borderRadius:10, fontSize:13, color:T.ink, background:T.cream, outline:"none", fontFamily:"Tajawal,sans-serif" }} />
+                </div>
+                <div style={{ background:T.cream, borderRadius:10, padding:"10px 12px", marginBottom:14 }}>
+                  {[
+                    ["قيمة الخدمة الكاملة", voucherFound.amount + " ر.س", T.ink],
+                    ["عمولة المنصة (5%)", Math.round(voucherFound.amount*0.05) + " ر.س", "#C62828"],
+                    ["صافي مستحقاتك", (voucherFound.amount - Math.round(voucherFound.amount*0.05)) + " ر.س", T.green],
+                  ].map(r => (
+                    <div key={r[0]} style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"3px 0", borderBottom:`1px solid ${T.creamDk}` }}>
+                      <span style={{ color:T.inkSoft }}>{r[0]}</span>
+                      <span style={{ fontWeight:700, color:r[2] }}>{r[1]}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={() => { setVoucherFound(null); setVoucherCode("") }}
+                    style={{ flex:1, padding:"10px", borderRadius:10, border:`1px solid ${T.creamDk}`, background:T.white, color:T.inkSoft, fontSize:12, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    إلغاء
+                  </button>
+                  <button onClick={redeemVoucher} disabled={voucherRedeeming}
+                    style={{ flex:2, padding:"10px", borderRadius:10, border:"none", background:T.green, color:T.white, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    {voucherRedeeming ? "...جاري التفعيل" : "✓ تفعيل القسيمة"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </Card>
+        )}
+      </div>
+
       <div style={{ display:"flex", background:T.white, borderRadius:12, overflow:"hidden", marginBottom:14, border:`1px solid ${T.creamDk}` }}>
         {[
           { id:"active",    label:"الفعّالة",  icon:"🟢", count: bookings.filter(b => b.status==="pending"||b.status==="confirmed").length },
@@ -2022,7 +2174,7 @@ function OwnerBookings() {
                 <span style={{ background:st.bg, color:st.color, fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20 }}>{st.label}</span>
               </div>
               <div style={{ fontSize:12, color:T.inkSoft, marginBottom:4 }}>
-                {bk.booking_type === "offer" ? "🏷️ عرض خاص" : bk.booking_type === "package" ? "🎁 باقة" : "✂️ خدمة"} {bk.service_name && `· ${bk.service_name}`}
+                {bk.booking_type === "offer" ? "🏷️ عرض خاص" : bk.booking_type === "package" ? "🎁 باقة" : bk.booking_type === "voucher" ? "🎟️ قسيمة هدية" : "✂️ خدمة"} {bk.service_name && `· ${bk.service_name}`}
               </div>
               <div style={{ fontSize:11, color:T.inkMuted, marginBottom:2 }}>
                 🕐 تاريخ الحجز: {bk.created_at ? new Date(bk.created_at).toLocaleDateString('ar-SA') : "—"}
@@ -5174,7 +5326,8 @@ function GiftPage({ setScreen }) {
   const [senderName, setSenderName] = useState("")
   const [msg, setMsg] = useState("")
   const [focusF, setFocusF] = useState(null)
-  const voucherCode = "BT-" + Math.random().toString(36).slice(2,8).toUpperCase()
+  const [sending, setSending] = useState(false)
+  const [voucherCode] = useState(() => "BT-" + Math.random().toString(36).slice(2,8).toUpperCase())
 
   const PRESETS = [100, 200, 300, 500]
 
@@ -5185,8 +5338,27 @@ function GiftPage({ setScreen }) {
     outline:"none", fontFamily:"Tajawal,sans-serif", transition:"border-color .2s",
   })
 
-  const send = () => {
+  const send = async () => {
     if (!recipientName || !recipientPhone || !senderName) { toast("⚠ أكملي البيانات"); return }
+    setSending(true)
+    const { error } = await supabase.from('vouchers').insert([{
+      code: voucherCode,
+      amount: amount,
+      sender_name: senderName,
+      recipient_name: recipientName,
+      recipient_phone: recipientPhone,
+      message: msg,
+      status: 'active',
+    }])
+    setSending(false)
+    if (error) { toast("⚠ حدث خطأ: " + error.message); return }
+    const waNum = recipientPhone.replace(/^0/, "").replace(/[^0-9]/g, "")
+    const waText = "🌸 لديكِ قسيمة هدية من " + senderName + "!\n\n" +
+      "القيمة: " + amount + " ر.س\n" +
+      "الكود: " + voucherCode + "\n" +
+      (msg ? ("\n" + msg + "\n") : "") +
+      "\nاستخدميها في أي صالون على منصة بيوتي تيك 🌸"
+    window.open("https://wa.me/966" + waNum + "?text=" + encodeURIComponent(waText), "_blank")
     setStep(3)
   }
 
@@ -5296,7 +5468,7 @@ function GiftPage({ setScreen }) {
 
             <div style={{ display:"flex", gap:10 }}>
               <OBtn onClick={() => setStep(1)}>← رجوع</OBtn>
-              <div style={{ flex:1 }}><PBtn full onClick={send}>🎁 إرسال الهدية</PBtn></div>
+              <div style={{ flex:1 }}><PBtn full disabled={sending} onClick={send}>{sending ? "...جاري الإرسال" : "🎁 إرسال الهدية"}</PBtn></div>
             </div>
           </div>
         )}
@@ -6000,6 +6172,39 @@ function AdminSalonsList({ salonsList, onUpdate }) {
   )
 }
 
+function ResetPasswordPage({ setScreen }) {
+  const toast = useToast()
+  const [pass, setPass] = useState("")
+  const [confirm, setConfirm] = useState("")
+  const [loading, setLoading] = useState(false)
+  const submit = async () => {
+    if (!pass || pass.length < 6) { toast("⚠ كلمة المرور 6 أحرف على الأقل"); return }
+    if (pass !== confirm) { toast("⚠ كلمة المرور غير متطابقة"); return }
+    setLoading(true)
+    const { error } = await supabase.auth.updateUser({ password: pass })
+    setLoading(false)
+    if (error) { toast("⚠ " + error.message); return }
+    toast("✅ تم تحديث كلمة المرور بنجاح!")
+    setScreen("client-home")
+  }
+  return (
+    <div style={{ background:T.cream, minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+      <div style={{ width:"100%", maxWidth:380 }}>
+        <div style={{ textAlign:"center", marginBottom:24 }}>
+          <div style={{ fontSize:44, marginBottom:10 }}>🔑</div>
+          <div style={{ fontSize:18, fontWeight:800, color:T.ink, marginBottom:6 }}>تعيين كلمة مرور جديدة</div>
+          <p style={{ fontSize:13, color:T.inkSoft }}>أدخلي كلمة مرور جديدة لحسابك</p>
+        </div>
+        <Card style={{ padding:20 }}>
+          <Field label="كلمة المرور الجديدة" type="password" placeholder="8 أحرف على الأقل" value={pass} onChange={e => setPass(e.target.value)} required />
+          <Field label="تأكيد كلمة المرور" type="password" placeholder="أعيدي الكتابة" value={confirm} onChange={e => setConfirm(e.target.value)} required />
+          <PBtn full disabled={loading} onClick={submit}>{loading ? "...جاري الحفظ" : "✓ حفظ كلمة المرور الجديدة"}</PBtn>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
 function AdminDashboard({ setScreen }) {
   const toast = useToast()
   const [tab, setTab] = useState("stats")
@@ -6392,8 +6597,9 @@ export default function App() {
         else if (role === "client") setScreen("client-home")
       }
     })
-    supabase.auth.onAuthStateChange((_event, session) => {
+    supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user || null)
+      if (event === "PASSWORD_RECOVERY") setScreen("reset-password")
     })
   }, [])
 
@@ -6434,6 +6640,7 @@ export default function App() {
     if (screen === "gift")             return <GiftPage        setScreen={go} />
     if (screen === "my-bookings")      return <MyBookingsPage  setScreen={go} />
     if (screen === "profile")           return <ClientProfile   setScreen={go} />
+    if (screen === "reset-password")    return <ResetPasswordPage setScreen={go} />
     return <ClientHome setScreen={go} setSalon={setSalon} />
   }
 
