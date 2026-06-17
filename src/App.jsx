@@ -164,6 +164,30 @@ function getServiceEmoji(name) {
 }
 
 
+function getTimeSlotsAvailability(services) {
+  const toMin = (t) => {
+    if (!t) return null
+    const [h, m] = t.split(":").map(Number)
+    return h * 60 + (m || 0)
+  }
+  const slots = {
+    morning:   { from: 0,    to: 720 },
+    afternoon: { from: 720,  to: 1020 },
+    evening:   { from: 1020, to: 1440 },
+  }
+  const result = { morning:false, afternoon:false, evening:false }
+  if (!services || services.length === 0) return result
+  services.forEach(sv => {
+    const from = toMin(sv.timeFrom)
+    const to   = toMin(sv.timeTo)
+    if (from == null || to == null) return
+    Object.keys(slots).forEach(key => {
+      if (from < slots[key].to && to > slots[key].from) result[key] = true
+    })
+  })
+  return result
+}
+
 function SkeletonCard() {
   return (
     <div style={{ background:T.white, borderRadius:16, overflow:"hidden", marginBottom:14 }}>
