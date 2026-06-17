@@ -5315,7 +5315,7 @@ function NotFoundPage({ setScreen }) {
 /* ══════════════════════════════════════════
    🎁 GIFT VOUCHER PAGE
 ══════════════════════════════════════════ */
-function GiftPage({ setScreen }) {
+function GiftPage_OLD_TO_DELETE({ setScreen }) {
   const toast = useToast()
   const [step, setStep] = useState(1) // 1=choose, 2=details, 3=done
   const [amount, setAmount] = useState(200)
@@ -5484,6 +5484,239 @@ function GiftPage({ setScreen }) {
 }
 
 
+
+function GiftPage_OLD({ setScreen }) {
+  const toast = useToast()
+  const salons = useSalons()
+  const [step, setStep] = useState(1)
+  const [search, setSearch] = useState("")
+  const [selectedSalon, setSelectedSalon] = useState(null)
+  const [selectedServices, setSelectedServices] = useState([])
+  const [recipientName, setRecipientName] = useState("")
+  const [recipientPhone, setRecipientPhone] = useState("")
+  const [senderName, setSenderName] = useState("")
+  const [msg, setMsg] = useState("")
+  const [focusF, setFocusF] = useState(null)
+  const [sending, setSending] = useState(false)
+
+  const filteredSalons = salons.filter(s => !search || s.name.includes(search) || s.city.includes(search))
+
+  const toggleService = (sv) => {
+    setSelectedServices(prev =>
+      prev.find(x => x.n === sv.n) ? prev.filter(x => x.n !== sv.n) : [...prev, sv]
+    )
+  }
+
+  const totalAmount = selectedServices.reduce((s, sv) => s + (sv.p||0), 0)
+  const platformFee = Math.round(totalAmount * 0.05)
+  const salonNet = totalAmount - platformFee
+
+  const inp = (k) => ({
+    width:"100%", padding:"12px 14px",
+    border:`1.5px solid ${focusF===k ? T.rose : T.creamDk}`,
+    borderRadius:12, fontSize:14, color:T.ink, background:T.cream,
+    outline:"none", fontFamily:"Tajawal,sans-serif", transition:"border-color .2s",
+  })
+
+  const send = async () => {
+    if (selectedServices.length === 0) { toast("⚠ اختاري خدمة واحدة على الأقل"); return }
+    if (!recipientName || !recipientPhone || !senderName) { toast("⚠ أكملي البيانات"); return }
+    setSending(true)
+    const waWindow = window.open("", "_blank")
+    const now = new Date()
+    const dateStr = now.toISOString().split("T")[0]
+    const timeStr = String(now.getHours()).padStart(2,'0') + ":" + String(now.getMinutes()).padStart(2,'0')
+    const servicesText = selectedServices.map(sv => sv.n).join(" + ")
+
+    const { error } = await supabase.from('bookings').insert([{
+      salon_id: selectedSalon.id,
+      client_name: recipientName,
+      client_phone: recipientPhone,
+      appointment_date: dateStr,
+      appointment_time: timeStr,
+      total_amount: totalAmount,
+      deposit_amount: totalAmount,
+      platform_fee: platformFee,
+      salon_amount: salonNet,
+      status: 'confirmed',
+      booking_type: 'love_gift',
+      service_name: servicesText,
+    }])
+
+    setSending(false)
+    if (error) {
+      if (waWindow) waWindow.close()
+      toast("⚠ حدث خطأ: " + error.message)
+      return
+    }
+
+    if (selectedSalon.wa) {
+      const salonWaNum = (selectedSalon.wa || "").replace(/^0/, "").replace(/[^0-9]/g, "")
+      const salonMsg = "💝 إهداء محبة جديد!\n\n" +
+        "العميلة: " + recipientName + "\n" +
+        "الجوال: " + recipientPhone + "\n" +
+        "الخدمات: " + servicesText + "\n" +
+        "المبلغ كامل: " + totalAmount + " ر.س (مدفوع بالكامل)\n" +
+        "صافي مستحقاتكم: " + salonNet + " ر.س"
+      setTimeout(() => window.open("https://wa.me/966" + salonWaNum + "?text=" + encodeURIComponent(salonMsg), "_blank"), 800)
+    }
+
+    const recWaNum = recipientPhone.replace(/^0/, "").replace(/[^0-9]/g, "")
+    const recMsg = "💝 لديكِ إهداء محبة من " + senderName + "!\n\n" +
+      "الصالون: " + selectedSalon.name + " — " + selectedSalon.city + "\n" +
+      "الخدمات: " + servicesText + "\n" +
+      "القيمة: " + totalAmount + " ر.س (مدفوعة بالكامل)\n" +
+      (msg ? ("\n" + msg + "\n") : "") +
+      "\nتواصلي مع الصالون لتحديد موعد زيارتك 🌸"
+    const recUrl = "https://wa.me/966" + recWaNum + "?text=" + encodeURIComponent(recMsg)
+    if (waWindow) waWindow.location.href = recUrl
+    else window.open(recUrl, "_blank")
+
+    setStep(3)
+  }
+
+  if (step === 3) return (
+    <div style={{ background:T.cream, minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+      <div style={{ width:"100%", maxWidth:380 }}>
+        <div style={{ background:`linear-gradient(135deg,${T.roseDp},#7A4830)`, borderRadius:24, padding:"32px 24px", textAlign:"center", marginBottom:20, boxShadow:"0 12px 40px rgba(168,112,90,.35)" }}>
+          <div style={{ fontSize:48, marginBottom:12 }}>💝</div>
+          <div style={{ fontSize:13, color:"rgba(255,255,255,.7)", marginBottom:4 }}>إهداء محبة من {senderName}</div>
+          <div style={{ fontSize:13, color:"rgba(255,255,255,.7)", marginBottom:16 }}>إلى {recipientName}</div>
+          <div style={{ fontSize:15, color:T.white, fontWeight:700, marginBottom:6 }}>{selectedSalon?.name}</div>
+          <div style={{ fontSize:13, color:"rgba(255,255,255,.8)", marginBottom:16 }}>{selectedServices.map(sv => sv.n).join(" + ")}</div>
+          <div style={{ fontSize:36, fontWeight:900, color:T.white }}>{totalAmount} ر.س</div>
+          <div style={{ fontSize:12, color:"rgba(255,255,255,.7)" }}>مدفوعة بالكامل 🎉</div>
+        </div>
+        <div style={{ background:T.greenL, borderRadius:14, padding:"14px 16px", marginBottom:16, textAlign:"center" }}>
+          <div style={{ fontSize:14, fontWeight:700, color:T.green, marginBottom:4 }}>✅ تم الإهداء بنجاح!</div>
+          <div style={{ fontSize:12, color:T.inkSoft }}>أُرسل تفاصيل الإهداء لـ {recipientPhone} على واتساب، والصالون تم إشعاره أيضاً</div>
+        </div>
+        <PBtn full onClick={() => setScreen("client-home")}>← العودة للرئيسية</PBtn>
+      </div>
+    </div>
+  )
+
+  return (
+    <div style={{ background:T.cream, minHeight:"100vh", paddingBottom:40 }}>
+      <div style={{ background:T.white, borderBottom:`1px solid ${T.roseL}`, padding:"14px 20px", display:"flex", alignItems:"center", gap:12 }}>
+        <button onClick={() => step===1 ? setScreen("client-home") : setStep(1)} style={{ width:36, height:36, borderRadius:"50%", border:"none", background:T.cream, cursor:"pointer", fontSize:16 }}>←</button>
+        <div style={{ fontSize:16, fontWeight:800, color:T.ink }}>إهداء محبة 💝</div>
+      </div>
+
+      <div style={{ padding:"20px 18px" }}>
+        <div style={{ display:"flex", gap:6, marginBottom:22 }}>
+          {["اختاري الصالون","الخدمات والبيانات"].map((lbl, i) => (
+            <div key={lbl} style={{ flex:1 }}>
+              <div style={{ height:4, borderRadius:4, background:step>i+1 ? T.roseDp : step===i+1 ? T.rose : T.creamDk, marginBottom:5, transition:"background .3s" }} />
+              <div style={{ fontSize:10, color:step===i+1 ? T.roseDp : T.inkMuted, fontWeight:step===i+1 ? 700 : 400 }}>{lbl}</div>
+            </div>
+          ))}
+        </div>
+
+        {step === 1 && (
+          <div>
+            <div style={{ textAlign:"center", marginBottom:20 }}>
+              <div style={{ fontSize:44, marginBottom:8 }}>💝</div>
+              <div style={{ fontSize:17, fontWeight:800, color:T.ink, marginBottom:6 }}>أهدي محبة لشخص غالي</div>
+              <p style={{ fontSize:13, color:T.inkSoft, lineHeight:1.7 }}>اختاري الصالون وادفعي قيمة الخدمة كاملة، وهي تتواصل مع الصالون لتحديد الموعد</p>
+            </div>
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="ابحثي باسم الصالون أو المدينة..."
+              style={{ width:"100%", padding:"12px 16px", border:`1.5px solid ${T.creamDk}`, borderRadius:14, fontSize:14, color:T.ink, background:T.white, outline:"none", fontFamily:"Tajawal,sans-serif", marginBottom:16 }} />
+            {filteredSalons.length === 0 && <Empty icon="🏪" title="لا توجد صالونات" desc="جرّب كلمة بحث أخرى" />}
+            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+              {filteredSalons.map(s => (
+                <div key={s.id} onClick={() => { setSelectedSalon(s); setStep(2) }}
+                  style={{ background:T.white, borderRadius:14, padding:"14px 16px", border:`2px solid ${T.creamDk}`, cursor:"pointer", display:"flex", alignItems:"center", gap:12 }}>
+                  <div style={{ width:48, height:48, borderRadius:12, overflow:"hidden", flexShrink:0, background:T.roseL, display:"flex", alignItems:"center", justifyContent:"center", fontSize:22 }}>
+                    {s.imageUrl ? <img src={s.imageUrl} style={{ width:"100%", height:"100%", objectFit:"cover" }} /> : "💅"}
+                  </div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:14, fontWeight:700, color:T.ink }}>{s.name}</div>
+                    <div style={{ fontSize:12, color:T.inkSoft }}>📍 {s.city} · {s.services?.length||0} خدمة</div>
+                  </div>
+                  <span style={{ fontSize:16, color:T.inkMuted }}>←</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {step === 2 && selectedSalon && (
+          <div>
+            <div style={{ background:T.white, borderRadius:14, padding:"12px 16px", marginBottom:16, display:"flex", alignItems:"center", gap:10, border:`1.5px solid ${T.roseL}` }}>
+              <div style={{ width:38, height:38, borderRadius:10, overflow:"hidden", flexShrink:0, background:T.roseL, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>
+                {selectedSalon.imageUrl ? <img src={selectedSalon.imageUrl} style={{ width:"100%", height:"100%", objectFit:"cover" }} /> : "💅"}
+              </div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{selectedSalon.name}</div>
+                <div style={{ fontSize:11, color:T.inkSoft }}>📍 {selectedSalon.city}</div>
+              </div>
+              <span onClick={() => setStep(1)} style={{ fontSize:12, color:T.roseDp, fontWeight:700, cursor:"pointer" }}>تغيير</span>
+            </div>
+
+            <div style={{ fontSize:13, fontWeight:800, color:T.ink, marginBottom:10 }}>اختاري الخدمة أو الخدمات</div>
+            {(!selectedSalon.services || selectedSalon.services.length === 0) && (
+              <Empty icon="✂️" title="لا توجد خدمات" desc="هذا الصالون لم يضف خدماته بعد" />
+            )}
+            <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:18 }}>
+              {(selectedSalon.services||[]).map(sv => {
+                const isSel = selectedServices.find(x => x.n === sv.n)
+                return (
+                  <div key={sv.n} onClick={() => toggleService(sv)}
+                    style={{ background:T.white, borderRadius:12, padding:"12px 14px", border:`2px solid ${isSel ? T.roseDp : T.creamDk}`, cursor:"pointer", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                      <div style={{ width:20, height:20, borderRadius:6, border:`2px solid ${isSel ? T.roseDp : T.creamDk}`, background:isSel ? T.roseDp : "transparent", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                        {isSel && <span style={{ color:T.white, fontSize:12 }}>✓</span>}
+                      </div>
+                      <span style={{ fontSize:13, fontWeight:600, color:T.ink }}>{getServiceEmoji(sv.n)} {sv.n}</span>
+                    </div>
+                    <span style={{ fontSize:14, fontWeight:800, color:T.gold }}>{sv.p} ر.س</span>
+                  </div>
+                )
+              })}
+            </div>
+
+            {selectedServices.length > 0 && (
+              <div style={{ background:T.goldPale, borderRadius:12, padding:"12px 14px", marginBottom:18, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <span style={{ fontSize:13, fontWeight:700, color:T.ink }}>الإجمالي</span>
+                <span style={{ fontSize:20, fontWeight:900, color:T.gold }}>{totalAmount} ر.س</span>
+              </div>
+            )}
+
+            <div style={{ marginBottom:14 }}>
+              <label style={{ fontSize:13, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:7 }}>اسم من تهدينها <span style={{ color:T.rose }}>*</span></label>
+              <input placeholder="مثال: نورة" value={recipientName} onChange={e => setRecipientName(e.target.value)} onFocus={() => setFocusF("rn")} onBlur={() => setFocusF(null)} style={inp("rn")} />
+            </div>
+            <div style={{ marginBottom:14 }}>
+              <label style={{ fontSize:13, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:7 }}>رقم واتساب المستلِمة <span style={{ color:T.rose }}>*</span></label>
+              <input type="tel" placeholder="05xxxxxxxx" value={recipientPhone} onChange={e => setRecipientPhone(e.target.value)} onFocus={() => setFocusF("rp")} onBlur={() => setFocusF(null)} style={inp("rp")} />
+            </div>
+            <div style={{ marginBottom:14 }}>
+              <label style={{ fontSize:13, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:7 }}>اسمك (المُرسِلة) <span style={{ color:T.rose }}>*</span></label>
+              <input placeholder="اسمك" value={senderName} onChange={e => setSenderName(e.target.value)} onFocus={() => setFocusF("sn")} onBlur={() => setFocusF(null)} style={inp("sn")} />
+            </div>
+            <div style={{ marginBottom:20 }}>
+              <label style={{ fontSize:13, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:7 }}>رسالة شخصية (اختياري)</label>
+              <textarea placeholder="اكتبي رسالة لصاحبتك... 💝" value={msg} onChange={e => setMsg(e.target.value)} rows={3}
+                onFocus={() => setFocusF("ms")} onBlur={() => setFocusF(null)}
+                style={{ ...inp("ms"), resize:"none", lineHeight:1.6 }} />
+            </div>
+
+            <div style={{ display:"flex", gap:10 }}>
+              <OBtn onClick={() => setStep(1)}>← رجوع</OBtn>
+              <div style={{ flex:1 }}>
+                <PBtn full disabled={sending || selectedServices.length===0} onClick={send}>
+                  {sending ? "...جاري الإهداء" : "💝 دفع " + totalAmount + " ر.س وإرسال الإهداء"}
+                </PBtn>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 function RatingWidget({ bookingId, onRate }) {
   const [selected, setSelected] = useState(0)
