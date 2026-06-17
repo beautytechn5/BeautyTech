@@ -223,11 +223,11 @@ const SUGGESTIONS = [
   { text:"صبغ شعر",      icon:"🎨", cat:"خدمات" },
   { text:"قص شعر",       icon:"✂️",  cat:"خدمات" },
   { text:"مكياج",        icon:"💄", cat:"خدمات" },
-  { text:"كيراتين",      icon:"💇‍♀️", cat:"خدمات" },
-  { text:"سبا",          icon:"🧖‍♀️", cat:"خدمات" },
+  { text:"كيراتين",      icon:"💇♀️", cat:"خدمات" },
+  { text:"سبا",          icon:"🧖♀️", cat:"خدمات" },
   { text:"أكريليك أظافر",icon:"💅", cat:"خدمات" },
   { text:"تنظيف بشرة",   icon:"✨", cat:"خدمات" },
-  { text:"مساج",         icon:"💆‍♀️", cat:"خدمات" },
+  { text:"مساج",         icon:"💆♀️", cat:"خدمات" },
   { text:"عرائس",        icon:"👰", cat:"مناسبات" },
   { text:"الرياض",       icon:"📍", cat:"مدن" },
   { text:"جدة",          icon:"📍", cat:"مدن" },
@@ -594,7 +594,7 @@ function ClientHome({ setScreen, setSalon }) {
           <div style={{ background:T.white, borderRadius:20, padding:"44px 24px", textAlign:"center", border:`2px dashed ${T.roseL}`, marginBottom:20 }}>
             <div style={{ fontSize:52, marginBottom:14 }}>🌸</div>
             <div style={{ fontSize:18, fontWeight:900, color:T.ink, lineHeight:1.4, marginBottom:10 }}>
-              المنصة في طور النمو،<br /><span style={{ color:T.roseDp }}>كوني أول صالون ينضم!</span>
+              المنصة في طور النمو,<br /><span style={{ color:T.roseDp }}>كوني أول صالون ينضم!</span>
             </div>
             <p style={{ fontSize:13, color:T.inkSoft, lineHeight:1.8, marginBottom:24 }}>
               سيظهر صالونك في أول القائمة وتحصلين على<br />أفضل ظهور أمام العملاء منذ اليوم الأول.
@@ -626,7 +626,7 @@ function ClientHome({ setScreen, setSalon }) {
                     {"★★★★★".slice(0, Math.floor(s.rating))}
                     <span style={{ color:T.inkSoft, fontWeight:400 }}> ({s.reviews})</span>
                   </span>
-                  <span style={{ fontSize:12, color:T.inkSoft }}>📍 {s.city}، {s.area}</span>
+                  <span style={{ fontSize:12, color:T.inkSoft }}>📍 {s.city}, {s.area}</span>
                 </div>
                 <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:12 }}>
                   {s.tags.map(tg => (
@@ -718,6 +718,143 @@ function ClientHome({ setScreen, setSalon }) {
   )
 }
 
+
+
+/* ══════════════════════════════════════════
+   ⚖️ COMPARE SALONS
+══════════════════════════════════════════ */
+function ComparePage({ setScreen, setSalon }) {
+  const salons = useSalons()
+  const [selected, setSelected] = useState([])
+  const [step, setStep] = useState(1) // 1=اختيار, 2=مقارنة
+  const [servicesMap, setServicesMap] = useState({})
+
+  const toggleSelect = (s) => {
+    if (selected.find(x => x.id === s.id)) {
+      setSelected(prev => prev.filter(x => x.id !== s.id))
+    } else if (selected.length < 2) {
+      setSelected(prev => [...prev, s])
+    }
+  }
+
+  const loadCompare = async () => {
+    const map = {}
+    for (const s of selected) {
+      const { data } = await supabase.from("services").select("*").eq("salon_id", s.id).eq("active", true)
+      map[s.id] = data || []
+    }
+    setServicesMap(map)
+    setStep(2)
+  }
+
+  return (
+    <div style={{ background:T.cream, minHeight:"100vh", paddingBottom:80 }}>
+      <div style={{ background:T.white, borderBottom:`1px solid ${T.roseL}`, padding:"14px 20px", display:"flex", alignItems:"center", gap:12, position:"sticky", top:0, zIndex:100 }}>
+        <button onClick={() => step===2 ? setStep(1) : setScreen("client-home")} style={{ width:36, height:36, borderRadius:"50%", border:"none", background:T.cream, cursor:"pointer", fontSize:16 }}>←</button>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:15, fontWeight:800, color:T.ink }}>⚖️ مقارنة الصالونات</div>
+          <div style={{ fontSize:11, color:T.inkSoft }}>{step===1 ? "اختاري صالونين للمقارنة" : "نتيجة المقارنة"}</div>
+        </div>
+        {step===1 && selected.length===2 && (
+          <PBtn sm onClick={loadCompare}>مقارنة ←</PBtn>
+        )}
+      </div>
+
+      {step === 1 && (
+        <div style={{ padding:"16px 18px" }}>
+          <div style={{ background:T.goldPale, borderRadius:12, padding:"10px 14px", marginBottom:16, border:`1px solid ${T.goldL}`, fontSize:12, color:T.inkSoft }}>
+            💡 اختاري صالونين لمقارنتهما ({selected.length}/2)
+          </div>
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+            {salons.map(s => {
+              const isSelected = selected.find(x => x.id === s.id)
+              const isDisabled = !isSelected && selected.length >= 2
+              return (
+                <div key={s.id} onClick={() => !isDisabled && toggleSelect(s)}
+                  style={{ background:T.white, borderRadius:14, padding:"14px 16px", border:`2px solid ${isSelected ? T.roseDp : T.creamDk}`, cursor:isDisabled ? "not-allowed" : "pointer", opacity:isDisabled ? .5 : 1, display:"flex", alignItems:"center", gap:12 }}>
+                  <div style={{ width:48, height:48, borderRadius:12, overflow:"hidden", flexShrink:0, background:T.roseL, display:"flex", alignItems:"center", justifyContent:"center", fontSize:22 }}>
+                    {s.imageUrl ? <img src={s.imageUrl} style={{ width:"100%", height:"100%", objectFit:"cover" }} /> : "💅"}
+                  </div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:14, fontWeight:700, color:T.ink }}>{s.name}</div>
+                    <div style={{ fontSize:12, color:T.inkSoft }}>📍 {s.city} · {s.services?.length||0} خدمة</div>
+                  </div>
+                  <div style={{ width:24, height:24, borderRadius:"50%", border:`2px solid ${isSelected ? T.roseDp : T.creamDk}`, background:isSelected ? T.roseDp : T.white, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                    {isSelected && <div style={{ fontSize:12, color:T.white }}>✓</div>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {step === 2 && selected.length === 2 && (
+        <div style={{ padding:"16px 18px" }}>
+          {/* هيدر المقارنة */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
+            {selected.map(s => (
+              <div key={s.id} style={{ background:T.white, borderRadius:14, padding:"14px", textAlign:"center", border:`2px solid ${T.roseL}` }}>
+                <div style={{ width:56, height:56, borderRadius:14, overflow:"hidden", margin:"0 auto 8px", background:T.roseL, display:"flex", alignItems:"center", justifyContent:"center", fontSize:26 }}>
+                  {s.imageUrl ? <img src={s.imageUrl} style={{ width:"100%", height:"100%", objectFit:"cover" }} /> : "💅"}
+                </div>
+                <div style={{ fontSize:13, fontWeight:800, color:T.ink }}>{s.name}</div>
+                <div style={{ fontSize:11, color:T.inkSoft }}>📍 {s.city}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* مقارنة المعلومات */}
+          <Card style={{ padding:16, marginBottom:14 }}>
+            <div style={{ fontSize:14, fontWeight:800, color:T.ink, marginBottom:12 }}>📊 معلومات عامة</div>
+            {[
+              ["عدد الخدمات", selected.map(s => (servicesMap[s.id]?.length||0) + " خدمة")],
+              ["أقل سعر", selected.map(s => { const svcs = servicesMap[s.id]||[]; return svcs.length ? Math.min(...svcs.map(x=>x.price)) + " ر.س" : "—" })],
+              ["أعلى سعر", selected.map(s => { const svcs = servicesMap[s.id]||[]; return svcs.length ? Math.max(...svcs.map(x=>x.price)) + " ر.س" : "—" })],
+              ["التقييم", selected.map(s => "★★★★★ " + (s.rating||5.0))],
+              ["المدينة", selected.map(s => s.city||"—")],
+            ].map(row => (
+              <div key={row[0]} style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, padding:"8px 0", borderBottom:`1px solid ${T.creamDk}`, alignItems:"center" }}>
+                <div style={{ fontSize:11, color:T.inkSoft, textAlign:"center" }}>{row[0]}</div>
+                {row[1].map((v,i) => (
+                  <div key={i} style={{ fontSize:12, fontWeight:700, color:T.ink, textAlign:"center" }}>{v}</div>
+                ))}
+              </div>
+            ))}
+          </Card>
+
+          {/* مقارنة الخدمات */}
+          <Card style={{ padding:16, marginBottom:14 }}>
+            <div style={{ fontSize:14, fontWeight:800, color:T.ink, marginBottom:12 }}>✂️ الخدمات</div>
+            {selected.map(s => (
+              <div key={s.id} style={{ marginBottom:14 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:T.roseDp, marginBottom:8 }}>{s.name}</div>
+                <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                  {(servicesMap[s.id]||[]).slice(0,5).map(sv => (
+                    <div key={sv.id} style={{ display:"flex", justifyContent:"space-between", fontSize:12, background:T.cream, borderRadius:8, padding:"6px 10px" }}>
+                      <span style={{ color:T.ink }}>{getServiceEmoji(sv.name)} {sv.name}</span>
+                      <span style={{ fontWeight:700, color:T.gold }}>{sv.price} ر.س</span>
+                    </div>
+                  ))}
+                  {(servicesMap[s.id]||[]).length === 0 && <div style={{ fontSize:12, color:T.inkSoft }}>لا توجد خدمات</div>}
+                </div>
+              </div>
+            ))}
+          </Card>
+
+          {/* أزرار الحجز */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+            {selected.map(s => (
+              <PBtn key={s.id} full onClick={() => { setSalon(s); setScreen("booking") }}>
+                احجزي في {s.name.split(" ")[0]}
+              </PBtn>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 /* ══════════════════════════════════════════
    🏪 SALON DETAIL PAGE
@@ -933,27 +1070,15 @@ function BookingPage({ salon, setScreen }) {
     // إشعار واتساب للصالون
     if (salon?.wa) {
       const waNum = (salon.wa).replace(/^0/, "").replace(/[^0-9]/g,"")
-      const msg = encodeURIComponent(
-        `🌸 *حجز جديد على بيوتي تيك!*
-
-` +
-        `👤 العميلة: ${name}
-` +
-        `📞 الجوال: ${phone}
-` +
-        `✂️ الخدمة: ${svc?.n || ""}
-` +
-        `📅 التاريخ: ${date}
-` +
-        `⏰ الوقت: ${time}
-` +
-        `💰 المبلغ: ${svc?.p || 0} ر.س
-` +
-        `🔒 العربون: ${deposit} ر.س
-
-` +
-        `للتأكيد أو الإلغاء: beauty-tech-henna.vercel.app`
-      )
+      const msgText = "🌸 حجز جديد على بيوتي تيك!\n\n" +
+        "العميلة: " + name + "\n" +
+        "الجوال: " + phone + "\n" +
+        "الخدمة: " + (svc?.n || "") + "\n" +
+        "التاريخ: " + date + "\n" +
+        "الوقت: " + time + "\n" +
+        "المبلغ: " + (svc?.p || 0) + " ر.س\n" +
+        "العربون: " + deposit + " ر.س"
+      const msg = encodeURIComponent(msgText)
       setTimeout(() => window.open(`https://wa.me/966${waNum}?text=${msg}`, "_blank"), 1000)
     }
     toast("✅ تم الحجز! سيصلكِ تأكيد على واتساب")
@@ -968,7 +1093,7 @@ function BookingPage({ salon, setScreen }) {
         <button onClick={() => setScreen("client-home")} style={{ width:36, height:36, borderRadius:"50%", border:"none", background:T.cream, cursor:"pointer", fontSize:16 }}>←</button>
         <div>
           <div style={{ fontSize:15, fontWeight:800, color:T.ink }}>{salon.name}</div>
-          <div style={{ fontSize:11, color:T.inkSoft }}>📍 {salon.city}، {salon.area}</div>
+          <div style={{ fontSize:11, color:T.inkSoft }}>📍 {salon.city}, {salon.area}</div>
         </div>
       </div>
 
@@ -1675,6 +1800,15 @@ const ALL_OWN_TABS = [
   { id:"whatsapp",  icon:"💬", label:"بوت واتساب" },
   { id:"package",   icon:"📦", label:"باقتي" },
   { id:"settings",  icon:"⚙️",  label:"الإعدادات" },
+  { id:"calendar",  icon:"🗓️", label:"المواعيد" },
+  { id:"staff",     icon:"👩💼", label:"الفريق" },
+  { id:"broadcast", icon:"📢", label:"رسائل" },
+  { id:"calendar",  icon:"🗓️", label:"التقويم" },
+  { id:"staff",     icon:"👩💼", label:"الموظفات" },
+  { id:"broadcast", icon:"📣", label:"رسائل" },
+  { id:"coupons",   icon:"🎟️", label:"كوبونات" },
+  { id:"reports",   icon:"📈", label:"التقارير" },
+  { id:"finance",   icon:"💰", label:"المالية" },
   { id:"terms",     icon:"📋", label:"الشروط" },
 ]
 
@@ -1759,6 +1893,24 @@ function OwnerDashboard({ setScreen }) {
         {tab === "inventory" && <OwnerInventory toast={toast} />}
         {tab === "whatsapp"  && <OwnerWhatsapp toast={toast} />}
         {tab === "settings"  && <OwnerSettings toast={toast} />}
+        {tab === "calendar"  && <OwnerCalendar toast={toast} />}
+        {tab === "staff"     && <OwnerStaff toast={toast} />}
+        {tab === "broadcast" && <OwnerBroadcast toast={toast} />}
+        {tab === "calendar"  && <OwnerCalendar toast={toast} />}
+        {tab === "staff"     && <OwnerStaff toast={toast} />}
+        {tab === "broadcast" && <OwnerBroadcast toast={toast} />}
+        {tab === "coupons"   && <OwnerCoupons toast={toast} />}
+        {tab === "reports"   && (
+          (salonInfo.package === "pro" || salonInfo.package === "elite")
+            ? <OwnerReport salonInfo={salonInfo} />
+            : <div style={{ textAlign:"center", padding:40 }}>
+                <div style={{ fontSize:40, marginBottom:12 }}>🔒</div>
+                <div style={{ fontSize:15, fontWeight:700, color:T.ink, marginBottom:8 }}>متاح لباقة التوسع والنخبة</div>
+                <div style={{ fontSize:13, color:T.inkSoft, marginBottom:16 }}>قومي بالترقية للوصول للتقارير الاحترافية</div>
+                <PBtn onClick={() => {}}>ترقية الباقة</PBtn>
+              </div>
+        )}
+        {tab === "finance"   && <OwnerFinance toast={toast} />}
         {tab === "terms"     && <OwnerTerms />}
         {tab === "package"   && <OwnerPackage toast={toast} />}
         {tab === "offers"    && <OwnerOffers toast={toast} type="offer" />}
@@ -3208,13 +3360,8 @@ function OwnerPackage({ toast }) {
     const diff = (PKGS.find(p => p.id === newPkg)?.price || 0) - (PKGS.find(p => p.id === currentPkg)?.price || 0)
     const upgradeFee = diff + 100
     
-    const confirm = window.confirm(`ترقية من ${PKGS.find(p=>p.id===currentPkg)?.name} إلى ${PKGS.find(p=>p.id===newPkg)?.name}
-
-رسوم الترقية: ${upgradeFee} ر.س (الفرق ${diff} ر.س + رسوم ترقية 100 ر.س)
-
-للدفع تواصلي معنا: 0552401658
-
-هل تريدين المتابعة؟`)
+    const confirmMsg = "ترقية من " + (PKGS.find(p=>p.id===currentPkg)?.name||"") + " إلى " + (PKGS.find(p=>p.id===newPkg)?.name||"") + "\n\nرسوم الترقية: " + upgradeFee + " ر.س\n\nللدفع تواصلي: 0552401658"
+    const confirm = window.confirm(confirmMsg)
     if (!confirm) return
     
     const { data: { session } } = await supabase.auth.getSession()
@@ -3305,7 +3452,7 @@ function OwnerPackage({ toast }) {
         <div style={{ fontSize:12, color:T.inkSoft, marginBottom:10 }}>
           بعد التحويل أرسلي إثبات الدفع على واتساب وسيتم تفعيل الباقة خلال ساعة:
         </div>
-        <a href="https://wa.me/966552401658?text=السلام عليكم، أرغب في تفعيل/ترقية باقتي في بيوتي تيك. إرفق إثبات الدفع."
+        <a href="https://wa.me/966552401658?text=السلام عليكم, أرغب في تفعيل/ترقية باقتي في بيوتي تيك. إرفق إثبات الدفع."
           target="_blank" rel="noreferrer"
           style={{ display:"block", width:"100%", padding:"12px", borderRadius:12, border:"none", background:`linear-gradient(135deg,${T.green},#1B5E20)`, color:T.white, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif", textAlign:"center", textDecoration:"none" }}>
           📲 إرسال إثبات الدفع على واتساب
@@ -3319,6 +3466,1012 @@ function OwnerPackage({ toast }) {
 }
 
 
+
+
+
+
+
+function OwnerCalendar({ toast }) {
+  const [bookings, setBookings] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [weekStart, setWeekStart] = useState(() => {
+    const d = new Date()
+    d.setDate(d.getDate() - d.getDay() + 6) // السبت
+    return d
+  })
+
+  const days = Array.from({length:7}, (_,i) => {
+    const d = new Date(weekStart)
+    d.setDate(weekStart.getDate() - 6 + i)
+    return d
+  })
+
+  useEffect(() => { loadBookings() }, [weekStart])
+
+  const loadBookings = async () => {
+    setLoading(true)
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) { setLoading(false); return }
+    const { data: salon } = await supabase.from("salons").select("id").eq("email", session.user.email)
+    if (!salon?.[0]) { setLoading(false); return }
+    const from = days[0].toISOString().split("T")[0]
+    const to = days[6].toISOString().split("T")[0]
+    const { data } = await supabase.from("bookings").select("*")
+      .eq("salon_id", salon[0].id)
+      .gte("appointment_date", from)
+      .lte("appointment_date", to)
+      .order("appointment_time")
+    setBookings(data || [])
+    setLoading(false)
+  }
+
+  const prevWeek = () => { const d = new Date(weekStart); d.setDate(d.getDate()-7); setWeekStart(d) }
+  const nextWeek = () => { const d = new Date(weekStart); d.setDate(d.getDate()+7); setWeekStart(d) }
+
+  const dayNames = ["سبت","أحد","اثنين","ثلاثاء","أربعاء","خميس","جمعة"]
+  const STATUS_COLORS = { pending:T.gold, confirmed:T.green, completed:T.inkSoft, cancelled:T.red }
+
+  const today = new Date().toISOString().split("T")[0]
+
+  return (
+    <div>
+      <div style={{ fontSize:16, fontWeight:800, color:T.ink, marginBottom:4 }}>📅 جدول المواعيد</div>
+      <div style={{ fontSize:11, color:T.inkSoft, marginBottom:14 }}>عرض أسبوعي لكل حجوزاتك</div>
+
+      {/* تنقل الأسبوع */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+        <button onClick={prevWeek} style={{ width:36, height:36, borderRadius:"50%", border:`1px solid ${T.creamDk}`, background:T.white, cursor:"pointer", fontSize:16 }}>‹</button>
+        <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>
+          {days[0].toLocaleDateString("ar-SA", { month:"short", day:"numeric" })} — {days[6].toLocaleDateString("ar-SA", { month:"short", day:"numeric", year:"numeric" })}
+        </div>
+        <button onClick={nextWeek} style={{ width:36, height:36, borderRadius:"50%", border:`1px solid ${T.creamDk}`, background:T.white, cursor:"pointer", fontSize:16 }}>›</button>
+      </div>
+
+      {loading && <div style={{ textAlign:"center", padding:30, color:T.inkSoft }}>...جاري التحميل</div>}
+
+      {/* أيام الأسبوع */}
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        {days.map((day, i) => {
+          const dateStr = day.toISOString().split("T")[0]
+          const dayBks = bookings.filter(b => b.appointment_date === dateStr)
+          const isToday = dateStr === today
+          return (
+            <div key={i} style={{ background:T.white, borderRadius:14, overflow:"hidden", border:`2px solid ${isToday ? T.roseDp : T.creamDk}` }}>
+              {/* هيدر اليوم */}
+              <div style={{ padding:"10px 14px", background:isToday ? T.roseL : T.cream, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <div style={{ fontSize:13, fontWeight:800, color:isToday ? T.roseDp : T.ink }}>{dayNames[i]}</div>
+                  <div style={{ fontSize:11, color:T.inkSoft }}>{day.toLocaleDateString("ar-SA", { month:"short", day:"numeric" })}</div>
+                  {isToday && <span style={{ background:T.roseDp, color:T.white, fontSize:9, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>اليوم</span>}
+                </div>
+                <div style={{ fontSize:12, fontWeight:700, color:dayBks.length > 0 ? T.roseDp : T.inkSoft }}>
+                  {dayBks.length > 0 ? dayBks.length + " حجز" : "لا حجوزات"}
+                </div>
+              </div>
+              {/* حجوزات اليوم */}
+              {dayBks.length > 0 && (
+                <div style={{ padding:"8px 14px", display:"flex", flexDirection:"column", gap:6 }}>
+                  {dayBks.map(bk => (
+                    <div key={bk.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", background:T.cream, borderRadius:10, borderRight:`3px solid ${STATUS_COLORS[bk.status]||T.gold}` }}>
+                      <div style={{ fontSize:12, fontWeight:700, color:T.roseDp, minWidth:44 }}>{bk.appointment_time}</div>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:12, fontWeight:700, color:T.ink }}>{bk.client_name}</div>
+                        {bk.service_name && <div style={{ fontSize:11, color:T.inkSoft }}>{bk.service_name}</div>}
+                      </div>
+                      <div style={{ fontSize:11, fontWeight:700, color:T.gold }}>{bk.total_amount||0} ر.س</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+
+function OwnerStaff({ toast }) {
+  const [staff, setStaff] = useState([])
+  const [showAdd, setShowAdd] = useState(false)
+  const [salonId, setSalonId] = useState(null)
+  const [form, setForm] = useState({ name:"", phone:"", specialty:"", days:[], time_from:"09:00", time_to:"18:00" })
+  const [saving, setSaving] = useState(false)
+  const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }))
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      const { data: salon } = await supabase.from("salons").select("id").eq("email", session.user.email)
+      if (!salon?.[0]) return
+      setSalonId(salon[0].id)
+      const { data } = await supabase.from("staff").select("*").eq("salon_id", salon[0].id)
+      setStaff(data || [])
+    }
+    load()
+  }, [])
+
+  const saveStaff = async () => {
+    if (!form.name) { toast("⚠ أدخلي اسم الموظفة"); return }
+    setSaving(true)
+    const { data } = await supabase.from("staff").insert([{ salon_id: salonId, ...form, active:true }]).select()
+    if (data?.[0]) setStaff(s => [...s, data[0]])
+    setForm({ name:"", phone:"", specialty:"", days:[], time_from:"09:00", time_to:"18:00" })
+    setShowAdd(false)
+    setSaving(false)
+    toast("✅ تمت إضافة الموظفة!")
+  }
+
+  const deleteStaff = async (id) => {
+    await supabase.from("staff").delete().eq("id", id)
+    setStaff(s => s.filter(x => x.id !== id))
+    toast("🗑 تم الحذف")
+  }
+
+  const SPECIALTIES = ["قص شعر","صبغ","مكياج","عناية بشرة","أظافر","رموش","حناء","كيراتين","كل الخدمات"]
+
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+        <div>
+          <div style={{ fontSize:16, fontWeight:800, color:T.ink }}>👩💼 فريق العمل</div>
+          <div style={{ fontSize:11, color:T.inkSoft, marginTop:2 }}>أضيفي موظفاتك وتخصصاتهن</div>
+        </div>
+        <PBtn sm onClick={() => setShowAdd(!showAdd)}>+ إضافة</PBtn>
+      </div>
+
+      {showAdd && (
+        <Card style={{ padding:16, marginBottom:14, border:`2px solid ${T.roseL}` }}>
+          <div style={{ fontSize:14, fontWeight:800, color:T.ink, marginBottom:12 }}>موظفة جديدة</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+            <div>
+              <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:4 }}>الاسم *</label>
+              <input value={form.name} onChange={set("name")} placeholder="اسم الموظفة"
+                style={{ width:"100%", padding:"9px 12px", border:`1.5px solid ${T.creamDk}`, borderRadius:10, fontSize:13, fontFamily:"Tajawal,sans-serif", background:T.cream, color:T.ink, outline:"none" }} />
+            </div>
+            <div>
+              <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:4 }}>الجوال</label>
+              <input value={form.phone} onChange={set("phone")} placeholder="05xxxxxxxx"
+                style={{ width:"100%", padding:"9px 12px", border:`1.5px solid ${T.creamDk}`, borderRadius:10, fontSize:13, fontFamily:"Tajawal,sans-serif", background:T.cream, color:T.ink, outline:"none" }} />
+            </div>
+          </div>
+          <div style={{ marginBottom:10 }}>
+            <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:4 }}>التخصص</label>
+            <select value={form.specialty} onChange={set("specialty")}
+              style={{ width:"100%", padding:"9px 12px", border:`1.5px solid ${T.creamDk}`, borderRadius:10, fontSize:13, fontFamily:"Tajawal,sans-serif", background:T.cream, color:T.ink, outline:"none" }}>
+              <option value="">اختاري التخصص</option>
+              {SPECIALTIES.map(s => <option key={s}>{s}</option>)}
+            </select>
+          </div>
+          <div style={{ marginBottom:10 }}>
+            <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:6 }}>أيام العمل</label>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
+              {["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"].map(d => (
+                <button key={d} onClick={() => setForm(f => ({ ...f, days: f.days.includes(d) ? f.days.filter(x=>x!==d) : [...f.days, d] }))}
+                  style={{ padding:"5px 10px", borderRadius:20, border:`1.5px solid ${form.days.includes(d) ? T.roseDp : T.creamDk}`, background:form.days.includes(d) ? T.roseL : T.white, color:form.days.includes(d) ? T.roseDp : T.inkSoft, fontSize:11, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                  {d}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
+            <div>
+              <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:4 }}>من</label>
+              <select value={form.time_from} onChange={set("time_from")}
+                style={{ width:"100%", padding:"9px 12px", border:`1.5px solid ${T.creamDk}`, borderRadius:10, fontSize:13, fontFamily:"Tajawal,sans-serif", background:T.cream, outline:"none" }}>
+                {ALL_TIMES.map(t => <option key={t}>{t}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:4 }}>إلى</label>
+              <select value={form.time_to} onChange={set("time_to")}
+                style={{ width:"100%", padding:"9px 12px", border:`1.5px solid ${T.creamDk}`, borderRadius:10, fontSize:13, fontFamily:"Tajawal,sans-serif", background:T.cream, outline:"none" }}>
+                {ALL_TIMES.map(t => <option key={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={() => setShowAdd(false)} style={{ flex:1, padding:"10px", borderRadius:10, border:`1px solid ${T.creamDk}`, background:T.white, color:T.inkSoft, fontSize:12, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>إلغاء</button>
+            <button onClick={saveStaff} disabled={saving} style={{ flex:2, padding:"10px", borderRadius:10, border:"none", background:T.roseDp, color:T.white, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+              {saving ? "...جاري" : "✓ إضافة"}
+            </button>
+          </div>
+        </Card>
+      )}
+
+      {staff.length === 0 && !showAdd && <Empty icon="👩💼" title="لا توجد موظفات بعد" desc="أضيفي فريق عملك لتنظيم الحجوزات" />}
+
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        {staff.map(s => (
+          <Card key={s.id} style={{ padding:14 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+              <div style={{ display:"flex", gap:12, alignItems:"center" }}>
+                <div style={{ width:44, height:44, borderRadius:"50%", background:`linear-gradient(135deg,${T.roseL},${T.goldPale})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}>👩</div>
+                <div>
+                  <div style={{ fontSize:14, fontWeight:800, color:T.ink }}>{s.name}</div>
+                  {s.specialty && <div style={{ fontSize:12, color:T.roseDp, marginTop:2 }}>✂️ {s.specialty}</div>}
+                  {s.phone && <div style={{ fontSize:11, color:T.inkSoft }}>📞 {s.phone}</div>}
+                  {s.days?.length > 0 && <div style={{ fontSize:11, color:T.inkSoft }}>{s.days.join(" · ")}</div>}
+                  {s.time_from && <div style={{ fontSize:11, color:T.inkSoft }}>⏰ {s.time_from} — {s.time_to}</div>}
+                </div>
+              </div>
+              <button onClick={() => deleteStaff(s.id)} style={{ width:28, height:28, borderRadius:"50%", border:`1px solid ${T.redL}`, background:T.white, color:T.red, fontSize:12, cursor:"pointer" }}>✕</button>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+
+function OwnerBroadcast({ toast }) {
+  const [clients, setClients] = useState([])
+  const [message, setMessage] = useState("")
+  const [msgType, setMsgType] = useState("offer")
+  const [loading, setLoading] = useState(true)
+  const [salonInfo, setSalonInfo] = useState(null)
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(0)
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      const { data: salon } = await supabase.from("salons").select("*").eq("email", session.user.email)
+      if (!salon?.[0]) { setLoading(false); return }
+      setSalonInfo(salon[0])
+      const { data: bks } = await supabase.from("bookings").select("client_name,client_phone").eq("salon_id", salon[0].id)
+      if (bks) {
+        const unique = {}
+        bks.forEach(b => { if (b.client_phone) unique[b.client_phone] = b.client_name })
+        setClients(Object.entries(unique).map(([phone, name]) => ({ phone, name })))
+      }
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const MSG_TEMPLATES = {
+    offer: `🌸 عرض خاص من ${salonInfo?.name||"صالونك"}!
+
+[اكتبي تفاصيل العرض هنا]
+
+احجزي الآن: beauty-tech-henna.vercel.app`,
+    reminder: `تذكير: موعدك في ${salonInfo?.name||"صالونك"} غداً!
+
+نتطلع لاستقبالكِ 🌸`,
+    holiday: `🌸 ${salonInfo?.name||"صالونك"} يُهنئكِ بالمناسبة السعيدة!
+
+استمتعي بخصم خاص بهذه المناسبة — احجزي الآن`,
+    new_service: `✨ خدمة جديدة في ${salonInfo?.name||"صالونك"}!
+
+[اكتبي اسم الخدمة والسعر]
+
+احجزي الآن: beauty-tech-henna.vercel.app`,
+  }
+
+  const sendAll = () => {
+    if (!message) { toast("⚠ اكتبي الرسالة أولاً"); return }
+    if (clients.length === 0) { toast("⚠ لا توجد عملاء للإرسال"); return }
+    setSending(true)
+    let count = 0
+    clients.forEach((c, i) => {
+      setTimeout(() => {
+        const personalMsg = message.replace("{اسم_العميلة}", c.name || "عزيزتي")
+        const waNum = c.phone.replace(/^0/, "")
+        window.open("https://wa.me/966" + waNum + "?text=" + encodeURIComponent(personalMsg), "_blank")
+        count++
+        setSent(count)
+        if (count === clients.length) { setSending(false); toast("✅ تم فتح واتساب لـ " + count + " عميلة!") }
+      }, i * 1500)
+    })
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize:16, fontWeight:800, color:T.ink, marginBottom:4 }}>📢 رسائل جماعية</div>
+      <div style={{ fontSize:11, color:T.inkSoft, marginBottom:16 }}>أرسلي رسالة لكل عملائك دفعة وحدة عبر واتساب</div>
+
+      {/* إحصائية */}
+      <div style={{ background:`linear-gradient(135deg,${T.goldPale},#FFFBF0)`, borderRadius:12, padding:"12px 16px", marginBottom:16, border:`1px solid ${T.goldL}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+        <div>
+          <div style={{ fontSize:22, fontWeight:900, color:T.gold }}>{clients.length}</div>
+          <div style={{ fontSize:11, color:T.inkSoft }}>عميلة في قاعدة بياناتك</div>
+        </div>
+        {sending && <div style={{ fontSize:13, color:T.green, fontWeight:700 }}>جاري الإرسال {sent}/{clients.length}</div>}
+      </div>
+
+      {/* قوالب جاهزة */}
+      <Card style={{ padding:14, marginBottom:14 }}>
+        <div style={{ fontSize:13, fontWeight:700, color:T.ink, marginBottom:10 }}>📝 قوالب جاهزة</div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+          {[
+            { id:"offer", label:"🏷️ عرض خاص" },
+            { id:"reminder", label:"⏰ تذكير بموعد" },
+            { id:"holiday", label:"🎉 مناسبة" },
+            { id:"new_service", label:"✨ خدمة جديدة" },
+          ].map(t => (
+            <button key={t.id} onClick={() => { setMsgType(t.id); setMessage(MSG_TEMPLATES[t.id]) }}
+              style={{ padding:"9px", borderRadius:10, border:`1.5px solid ${msgType===t.id ? T.roseDp : T.creamDk}`, background:msgType===t.id ? T.roseL : T.white, color:msgType===t.id ? T.roseDp : T.inkSoft, fontSize:12, fontWeight:msgType===t.id ? 700 : 400, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      {/* كتابة الرسالة */}
+      <Card style={{ padding:14, marginBottom:14 }}>
+        <div style={{ fontSize:13, fontWeight:700, color:T.ink, marginBottom:8 }}>✏ نص الرسالة</div>
+        <div style={{ fontSize:11, color:T.inkSoft, marginBottom:8 }}>يمكنك استخدام {"{اسم_العميلة}"} لإضافة اسم كل عميلة تلقائياً</div>
+        <textarea value={message} onChange={e => setMessage(e.target.value)}
+          placeholder="اكتبي رسالتك هنا..."
+          rows={6}
+          style={{ width:"100%", padding:"12px 14px", border:`1.5px solid ${T.creamDk}`, borderRadius:12, fontSize:13, color:T.ink, background:T.cream, outline:"none", fontFamily:"Tajawal,sans-serif", resize:"none", lineHeight:1.8 }} />
+        <div style={{ fontSize:11, color:T.inkSoft, marginTop:6 }}>{message.length} حرف</div>
+      </Card>
+
+      {/* تحذير */}
+      <div style={{ background:T.roseL, borderRadius:12, padding:"10px 14px", marginBottom:14, border:`1px solid ${T.rose}` }}>
+        <div style={{ fontSize:11, color:T.roseDp, lineHeight:1.8 }}>
+          ⚠ ستُفتح نافذة واتساب لكل عميلة منفصلة — تأكدي من إرسال كل رسالة<br/>
+          💡 انتظري ثانية بين كل رسالة لتجنب الحظر
+        </div>
+      </div>
+
+      <button onClick={sendAll} disabled={sending || !message || clients.length === 0}
+        style={{ width:"100%", padding:"14px", borderRadius:14, border:"none", background:sending ? T.creamDk : `linear-gradient(135deg,#1B5E20,#2E7D32)`, color:T.white, fontSize:14, fontWeight:800, cursor:sending ? "not-allowed" : "pointer", fontFamily:"Tajawal,sans-serif" }}>
+        {sending ? `جاري الإرسال ${sent}/${clients.length}...` : `📲 إرسال لـ ${clients.length} عميلة عبر واتساب`}
+      </button>
+    </div>
+  )
+}
+
+
+function OwnerCoupons({ toast }) {
+  const [coupons, setCoupons] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showAdd, setShowAdd] = useState(false)
+  const [salonId, setSalonId] = useState(null)
+  const [editId, setEditId] = useState(null)
+  const [form, setForm] = useState({ code:"", discount_type:"percent", discount_value:"", min_amount:"", max_uses:"", valid_until:"", active:true })
+  const [saving, setSaving] = useState(false)
+  const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }))
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      const { data: salon } = await supabase.from("salons").select("id").eq("email", session.user.email)
+      if (!salon?.[0]) { setLoading(false); return }
+      setSalonId(salon[0].id)
+      const { data } = await supabase.from("coupons").select("*").eq("salon_id", salon[0].id).order("created_at", { ascending:false })
+      setCoupons(data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const generateCode = () => {
+    const code = "BT" + Math.random().toString(36).substr(2,6).toUpperCase()
+    setForm(f => ({ ...f, code }))
+  }
+
+  const saveCoupon = async () => {
+    if (!form.code || !form.discount_value) { toast("⚠ أدخلي الكود والخصم"); return }
+    setSaving(true)
+    if (editId) {
+      await supabase.from("coupons").update({ ...form, discount_value: Number(form.discount_value), min_amount: Number(form.min_amount)||0, max_uses: Number(form.max_uses)||null }).eq("id", editId)
+      setCoupons(c => c.map(x => x.id === editId ? { ...x, ...form } : x))
+      toast("✅ تم تعديل الكوبون!")
+      setEditId(null)
+    } else {
+      const { data } = await supabase.from("coupons").insert([{ salon_id: salonId, ...form, discount_value: Number(form.discount_value), min_amount: Number(form.min_amount)||0, max_uses: Number(form.max_uses)||null, used_count: 0 }]).select()
+      if (data?.[0]) setCoupons(c => [data[0], ...c])
+      toast("✅ تم إنشاء الكوبون!")
+    }
+    setSaving(false)
+    setShowAdd(false)
+    setForm({ code:"", discount_type:"percent", discount_value:"", min_amount:"", max_uses:"", valid_until:"", active:true })
+  }
+
+  const deleteCoupon = async (id) => {
+    await supabase.from("coupons").delete().eq("id", id)
+    setCoupons(c => c.filter(x => x.id !== id))
+    toast("🗑 تم حذف الكوبون")
+  }
+
+  const toggleCoupon = async (id, active) => {
+    await supabase.from("coupons").update({ active: !active }).eq("id", id)
+    setCoupons(c => c.map(x => x.id === id ? { ...x, active: !active } : x))
+  }
+
+  const startEdit = (c) => {
+    setEditId(c.id)
+    setForm({ code:c.code, discount_type:c.discount_type, discount_value:c.discount_value, min_amount:c.min_amount||"", max_uses:c.max_uses||"", valid_until:c.valid_until||"", active:c.active })
+    setShowAdd(true)
+  }
+
+  const inp = { width:"100%", padding:"10px 12px", border:`1.5px solid ${T.creamDk}`, borderRadius:10, fontSize:13, color:T.ink, background:T.cream, outline:"none", fontFamily:"Tajawal,sans-serif" }
+
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+        <div>
+          <div style={{ fontSize:16, fontWeight:800, color:T.ink }}>🎟️ كوبونات الخصم</div>
+          <div style={{ fontSize:11, color:T.inkSoft, marginTop:2 }}>شاركيها مع عملائك لجذب حجوزات أكثر</div>
+        </div>
+        <PBtn sm onClick={() => { setShowAdd(!showAdd); setEditId(null); setForm({ code:"", discount_type:"percent", discount_value:"", min_amount:"", max_uses:"", valid_until:"", active:true }) }}>
+          + إنشاء كوبون
+        </PBtn>
+      </div>
+
+      {/* نموذج إضافة/تعديل */}
+      {showAdd && (
+        <Card style={{ padding:16, marginBottom:14, border:`2px solid ${T.roseL}` }}>
+          <div style={{ fontSize:14, fontWeight:800, color:T.ink, marginBottom:14 }}>{editId ? "✏ تعديل الكوبون" : "🎟️ كوبون جديد"}</div>
+
+          {/* كود الكوبون */}
+          <div style={{ marginBottom:12 }}>
+            <label style={{ fontSize:12, color:T.inkSoft, display:"block", marginBottom:5 }}>كود الكوبون *</label>
+            <div style={{ display:"flex", gap:8 }}>
+              <input value={form.code} onChange={set("code")} placeholder="مثال: BEAUTY20" style={{ ...inp, flex:1, textTransform:"uppercase", fontWeight:700, letterSpacing:2 }} />
+              <button onClick={generateCode} style={{ padding:"0 14px", borderRadius:10, border:`1px solid ${T.creamDk}`, background:T.cream, color:T.inkSoft, fontSize:12, cursor:"pointer", fontFamily:"Tajawal,sans-serif", whiteSpace:"nowrap" }}>
+                🎲 عشوائي
+              </button>
+            </div>
+          </div>
+
+          {/* نوع الخصم */}
+          <div style={{ marginBottom:12 }}>
+            <label style={{ fontSize:12, color:T.inkSoft, display:"block", marginBottom:5 }}>نوع الخصم</label>
+            <div style={{ display:"flex", gap:8 }}>
+              {[{ id:"percent", label:"نسبة مئوية %" }, { id:"fixed", label:"مبلغ ثابت ر.س" }].map(t => (
+                <button key={t.id} onClick={() => setForm(f => ({ ...f, discount_type:t.id }))}
+                  style={{ flex:1, padding:"9px", borderRadius:10, border:`2px solid ${form.discount_type===t.id ? T.roseDp : T.creamDk}`, background:form.discount_type===t.id ? T.roseL : T.white, color:form.discount_type===t.id ? T.roseDp : T.inkSoft, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
+            <div>
+              <label style={{ fontSize:12, color:T.inkSoft, display:"block", marginBottom:5 }}>قيمة الخصم * {form.discount_type==="percent" ? "(٪)" : "(ر.س)"}</label>
+              <input type="number" value={form.discount_value} onChange={set("discount_value")} placeholder={form.discount_type==="percent" ? "20" : "50"} style={inp} />
+            </div>
+            <div>
+              <label style={{ fontSize:12, color:T.inkSoft, display:"block", marginBottom:5 }}>الحد الأدنى للطلب (ر.س)</label>
+              <input type="number" value={form.min_amount} onChange={set("min_amount")} placeholder="0" style={inp} />
+            </div>
+            <div>
+              <label style={{ fontSize:12, color:T.inkSoft, display:"block", marginBottom:5 }}>عدد مرات الاستخدام</label>
+              <input type="number" value={form.max_uses} onChange={set("max_uses")} placeholder="بلا حد" style={inp} />
+            </div>
+            <div>
+              <label style={{ fontSize:12, color:T.inkSoft, display:"block", marginBottom:5 }}>صالح حتى</label>
+              <input type="date" value={form.valid_until} onChange={set("valid_until")} style={inp} />
+            </div>
+          </div>
+
+          {/* معاينة */}
+          {form.discount_value && (
+            <div style={{ background:T.goldPale, borderRadius:10, padding:"10px 12px", marginBottom:12, border:`1px solid ${T.goldL}`, textAlign:"center" }}>
+              <div style={{ fontSize:11, color:T.inkSoft, marginBottom:4 }}>معاينة الكوبون</div>
+              <div style={{ fontSize:18, fontWeight:900, color:T.roseDp, letterSpacing:3 }}>{form.code || "BEAUTY"}</div>
+              <div style={{ fontSize:13, color:T.gold, fontWeight:700, marginTop:4 }}>
+                خصم {form.discount_value}{form.discount_type==="percent" ? "%" : " ر.س"}
+                {form.min_amount > 0 ? ` · عند الطلب فوق ${form.min_amount} ر.س` : ""}
+              </div>
+            </div>
+          )}
+
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={() => { setShowAdd(false); setEditId(null) }} style={{ flex:1, padding:"10px", borderRadius:10, border:`1px solid ${T.creamDk}`, background:T.white, color:T.inkSoft, fontSize:12, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>إلغاء</button>
+            <button onClick={saveCoupon} disabled={saving} style={{ flex:2, padding:"10px", borderRadius:10, border:"none", background:T.roseDp, color:T.white, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+              {saving ? "...جاري" : editId ? "✓ حفظ التعديل" : "✓ إنشاء الكوبون"}
+            </button>
+          </div>
+        </Card>
+      )}
+
+      {loading && <div style={{ textAlign:"center", padding:30, color:T.inkSoft }}>...جاري التحميل</div>}
+      {!loading && coupons.length === 0 && <Empty icon="🎟️" title="لا توجد كوبونات بعد" desc="أنشئي كوبون خصم لجذب عملاء جدد!" />}
+
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        {coupons.map(c => {
+          const isExpired = c.valid_until && new Date(c.valid_until) < new Date()
+          const isMaxed = c.max_uses && c.used_count >= c.max_uses
+          const status = isExpired ? "منتهي" : isMaxed ? "استُنفد" : c.active ? "فعّال" : "متوقف"
+          const statusColor = isExpired||isMaxed ? T.inkSoft : c.active ? T.green : T.inkSoft
+          const statusBg = isExpired||isMaxed ? T.creamDk : c.active ? T.greenL : T.creamDk
+          return (
+            <Card key={c.id} style={{ padding:14, opacity: isExpired||isMaxed ? .7 : 1 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
+                <div>
+                  <div style={{ fontSize:18, fontWeight:900, color:T.roseDp, letterSpacing:2 }}>{c.code}</div>
+                  <div style={{ fontSize:13, color:T.gold, fontWeight:700, marginTop:2 }}>
+                    خصم {c.discount_value}{c.discount_type==="percent" ? "%" : " ر.س"}
+                    {c.min_amount > 0 ? ` · فوق ${c.min_amount} ر.س` : ""}
+                  </div>
+                </div>
+                <span style={{ background:statusBg, color:statusColor, fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20 }}>{status}</span>
+              </div>
+              <div style={{ display:"flex", gap:16, fontSize:11, color:T.inkSoft, marginBottom:10 }}>
+                <span>🔢 استُخدم: {c.used_count||0}{c.max_uses ? `/${c.max_uses}` : ""} مرة</span>
+                {c.valid_until && <span>📅 حتى: {c.valid_until}</span>}
+              </div>
+              {!isExpired && !isMaxed && (
+                <div style={{ display:"flex", gap:6 }}>
+                  <button onClick={() => toggleCoupon(c.id, c.active)}
+                    style={{ flex:1, padding:"7px", borderRadius:8, border:`1px solid ${c.active ? T.creamDk : T.green}`, background:c.active ? T.cream : T.greenL, color:c.active ? T.inkSoft : T.green, fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    {c.active ? "⏸ إيقاف" : "▶ تفعيل"}
+                  </button>
+                  <button onClick={() => startEdit(c)}
+                    style={{ flex:1, padding:"7px", borderRadius:8, border:`1px solid ${T.goldL}`, background:T.goldPale, color:T.gold, fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    ✏ تعديل
+                  </button>
+                  <button onClick={() => deleteCoupon(c.id)}
+                    style={{ width:32, padding:"7px", borderRadius:8, border:`1px solid ${T.redL}`, background:T.white, color:T.red, fontSize:12, cursor:"pointer" }}>
+                    ✕
+                  </button>
+                </div>
+              )}
+            </Card>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function OwnerReport({ salonInfo }) {
+  const [bookings, setBookings] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [dateFrom, setDateFrom] = useState(() => {
+    const d = new Date(); d.setDate(1)
+    return d.toISOString().split("T")[0]
+  })
+  const [dateTo, setDateTo] = useState(() => new Date().toISOString().split("T")[0])
+  const [statusFilter, setStatusFilter] = useState("all")
+  const toast = useToast()
+
+  useEffect(() => { loadReport() }, [dateFrom, dateTo, statusFilter])
+
+  const loadReport = async () => {
+    setLoading(true)
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) { setLoading(false); return }
+    const { data: salon } = await supabase.from("salons").select("id").eq("email", session.user.email)
+    if (!salon || !salon[0]) { setLoading(false); return }
+    let q = supabase.from("bookings").select("*")
+      .eq("salon_id", salon[0].id)
+      .gte("appointment_date", dateFrom)
+      .lte("appointment_date", dateTo)
+      .order("appointment_date", { ascending: false })
+    if (statusFilter !== "all") q = q.eq("status", statusFilter)
+    const { data } = await q
+    setBookings(data || [])
+    setLoading(false)
+  }
+
+  // حسابات
+  const completed = bookings.filter(b => b.status === "completed")
+  const totalRevenue = completed.reduce((s,b) => s + (b.total_amount||0), 0)
+  const totalDeposits = completed.reduce((s,b) => s + (b.deposit_amount||0), 0)
+  const totalFees = completed.reduce((s,b) => s + (b.platform_fee || Math.round((b.total_amount||0)*0.05)), 0)
+  const totalNet = totalDeposits - totalFees
+  const pending = bookings.filter(b => b.status === "pending" || b.status === "confirmed").length
+  const cancelled = bookings.filter(b => b.status === "cancelled").length
+
+  // تصدير CSV
+  const exportCSV = () => {
+    const rows = [
+      ["التاريخ","الوقت","العميلة","الجوال","الخدمة","النوع","قيمة الخدمة","العربون","عمولة المنصة","الصافي","الحالة","حالة التحويل"],
+      ...bookings.map(b => [
+        b.appointment_date || "",
+        b.appointment_time || "",
+        b.client_name || "",
+        b.client_phone || "",
+        b.service_name || "",
+        b.booking_type === "offer" ? "عرض" : b.booking_type === "package" ? "باقة" : "خدمة",
+        b.total_amount || 0,
+        b.deposit_amount || 0,
+        b.platform_fee || Math.round((b.total_amount||0)*0.05),
+        (b.deposit_amount||0) - (b.platform_fee||Math.round((b.total_amount||0)*0.05)),
+        b.status === "completed" ? "مكتمل" : b.status === "cancelled" ? "ملغي" : b.status === "confirmed" ? "مؤكد" : "انتظار",
+        b.payment_status === "settled" ? "محوَّل" : "معلق",
+      ])
+    ]
+    const csv = rows.map(r => r.join(",")).join("\n")
+    const blob = new Blob(["" + csv], { type:"text/csv;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "تقرير_" + (salonInfo?.name||"الصالون") + "_" + dateFrom + "_" + dateTo + ".csv"
+    a.click()
+    toast("✅ تم تصدير التقرير!")
+  }
+
+  // تصدير HTML للطباعة
+  const printReport = () => {
+    const html = `
+      <!DOCTYPE html>
+      <html dir="rtl" lang="ar">
+      <head>
+        <meta charset="UTF-8">
+        <title>تقرير ${salonInfo?.name||"الصالون"}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
+          h1 { color: #A8705A; border-bottom: 2px solid #A8705A; padding-bottom: 10px; }
+          .header { display: flex; justify-content: space-between; margin-bottom: 20px; }
+          .summary { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 20px; }
+          .summary-card { background: #FAF7F2; border-radius: 8px; padding: 12px; text-align: center; border: 1px solid #F0D9D1; }
+          .summary-card .value { font-size: 20px; font-weight: bold; color: #A8705A; }
+          .summary-card .label { font-size: 11px; color: #888; margin-top: 4px; }
+          table { width: 100%; border-collapse: collapse; font-size: 12px; }
+          th { background: #A8705A; color: white; padding: 8px; text-align: right; }
+          td { padding: 7px 8px; border-bottom: 1px solid #eee; }
+          tr:nth-child(even) { background: #FAF7F2; }
+          .completed { color: green; font-weight: bold; }
+          .cancelled { color: red; }
+          .pending { color: #B8A060; }
+          .footer { margin-top: 20px; text-align: center; font-size: 11px; color: #aaa; }
+          @media print { body { padding: 10px; } }
+        </style>
+      </head>
+      <body>
+        <h1>🌸 تقرير ${salonInfo?.name||"الصالون"}</h1>
+        <div class="header">
+          <div>الفترة: ${dateFrom} — ${dateTo}</div>
+          <div>تاريخ الإصدار: ${new Date().toLocaleDateString("ar-SA")}</div>
+        </div>
+        <div class="summary">
+          <div class="summary-card"><div class="value">${bookings.length}</div><div class="label">إجمالي الحجوزات</div></div>
+          <div class="summary-card"><div class="value">${totalRevenue.toLocaleString()} ر.س</div><div class="label">إجمالي المبيعات</div></div>
+          <div class="summary-card"><div class="value">${totalFees.toLocaleString()} ر.س</div><div class="label">عمولة المنصة (5%)</div></div>
+          <div class="summary-card"><div class="value" style="color:green">${totalNet.toLocaleString()} ر.س</div><div class="label">صافي المستحقات</div></div>
+        </div>
+        <table>
+          <thead>
+            <tr><th>التاريخ</th><th>الوقت</th><th>العميلة</th><th>الخدمة</th><th>قيمة الخدمة</th><th>العربون</th><th>عمولة المنصة</th><th>الصافي</th><th>الحالة</th></tr>
+          </thead>
+          <tbody>
+            ${bookings.map(b => {
+              const fee = b.platform_fee || Math.round((b.total_amount||0)*0.05)
+              const net = (b.deposit_amount||0) - fee
+              const statusClass = b.status==="completed"?"completed":b.status==="cancelled"?"cancelled":"pending"
+              const statusLabel = b.status==="completed"?"✅ مكتمل":b.status==="cancelled"?"❌ ملغي":b.status==="confirmed"?"✓ مؤكد":"⏳ انتظار"
+              return `<tr>
+                <td>${b.appointment_date||""}</td>
+                <td>${b.appointment_time||""}</td>
+                <td>${b.client_name||""}</td>
+                <td>${b.service_name||""}</td>
+                <td>${b.total_amount||0} ر.س</td>
+                <td>${b.deposit_amount||0} ر.س</td>
+                <td style="color:red">${fee} ر.س</td>
+                <td style="color:green;font-weight:bold">${net} ر.س</td>
+                <td class="${statusClass}">${statusLabel}</td>
+              </tr>`
+            }).join("")}
+          </tbody>
+          <tfoot>
+            <tr style="background:#A8705A;color:white;font-weight:bold">
+              <td colspan="4">الإجمالي</td>
+              <td>${totalRevenue.toLocaleString()} ر.س</td>
+              <td>${totalDeposits.toLocaleString()} ر.س</td>
+              <td>${totalFees.toLocaleString()} ر.س</td>
+              <td>${totalNet.toLocaleString()} ر.س</td>
+              <td>${completed.length} مكتمل</td>
+            </tr>
+          </tfoot>
+        </table>
+        <div class="footer">بيوتي تيك — منصة صالونات التجميل الأولى في المملكة | beauty-tech-henna.vercel.app</div>
+      </body>
+      </html>
+    `
+    const win = window.open("", "_blank")
+    win.document.write(html)
+    win.document.close()
+    win.print()
+  }
+
+  const STATUS_LABELS = {
+    completed: { label:"✅ مكتمل", color:T.green, bg:T.greenL },
+    confirmed: { label:"✓ مؤكد",  color:"#1565C0", bg:"#E3F2FD" },
+    pending:   { label:"⏳ انتظار", color:T.gold,   bg:T.goldPale },
+    cancelled: { label:"❌ ملغي",  color:T.red,    bg:T.redL },
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize:16, fontWeight:800, color:T.ink, marginBottom:4 }}>📈 التقارير المالية</div>
+      <div style={{ fontSize:11, color:T.inkSoft, marginBottom:16 }}>تقارير احترافية قابلة للتصدير والطباعة</div>
+
+      {/* فلاتر */}
+      <Card style={{ padding:14, marginBottom:14 }}>
+        <div style={{ fontSize:12, fontWeight:700, color:T.ink, marginBottom:10 }}>🔍 فلترة التقرير</div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:10 }}>
+          <div>
+            <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:4 }}>من تاريخ</label>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+              style={{ width:"100%", padding:"9px 10px", border:`1px solid ${T.creamDk}`, borderRadius:8, fontSize:12, fontFamily:"Tajawal,sans-serif", background:T.white }} />
+          </div>
+          <div>
+            <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:4 }}>إلى تاريخ</label>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+              style={{ width:"100%", padding:"9px 10px", border:`1px solid ${T.creamDk}`, borderRadius:8, fontSize:12, fontFamily:"Tajawal,sans-serif", background:T.white }} />
+          </div>
+        </div>
+        <div style={{ display:"flex", gap:6 }}>
+          {[
+            { id:"all", label:"الكل" },
+            { id:"completed", label:"مكتملة" },
+            { id:"pending", label:"انتظار" },
+            { id:"cancelled", label:"ملغية" },
+          ].map(s => (
+            <button key={s.id} onClick={() => setStatusFilter(s.id)}
+              style={{ flex:1, padding:"7px 4px", borderRadius:8, border:`1.5px solid ${statusFilter===s.id ? T.roseDp : T.creamDk}`, background:statusFilter===s.id ? T.roseL : T.white, color:statusFilter===s.id ? T.roseDp : T.inkSoft, fontSize:11, fontWeight:statusFilter===s.id ? 700 : 400, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      {/* ملخص إحصائي */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
+        <div style={{ background:`linear-gradient(135deg,${T.roseDp},#7A3020)`, borderRadius:14, padding:"14px", textAlign:"center" }}>
+          <div style={{ fontSize:24, fontWeight:900, color:T.white }}>{bookings.length}</div>
+          <div style={{ fontSize:10, color:"rgba(255,255,255,.8)", marginTop:3 }}>إجمالي الحجوزات</div>
+        </div>
+        <div style={{ background:`linear-gradient(135deg,${T.gold},${T.gold2})`, borderRadius:14, padding:"14px", textAlign:"center" }}>
+          <div style={{ fontSize:22, fontWeight:900, color:T.white }}>{totalRevenue.toLocaleString()}</div>
+          <div style={{ fontSize:10, color:"rgba(255,255,255,.8)", marginTop:3 }}>إجمالي المبيعات (ر.س)</div>
+        </div>
+        <div style={{ background:T.white, borderRadius:14, padding:"14px", textAlign:"center", border:`1px solid ${T.creamDk}` }}>
+          <div style={{ fontSize:20, fontWeight:900, color:"#C62828" }}>{totalFees.toLocaleString()}</div>
+          <div style={{ fontSize:10, color:T.inkSoft, marginTop:3 }}>عمولة المنصة (5%)</div>
+        </div>
+        <div style={{ background:`linear-gradient(135deg,#2E7D32,#1B5E20)`, borderRadius:14, padding:"14px", textAlign:"center" }}>
+          <div style={{ fontSize:20, fontWeight:900, color:T.white }}>{totalNet.toLocaleString()}</div>
+          <div style={{ fontSize:10, color:"rgba(255,255,255,.8)", marginTop:3 }}>صافي مستحقاتك (ر.س)</div>
+        </div>
+      </div>
+
+      {/* أزرار التصدير */}
+      <div style={{ display:"flex", gap:8, marginBottom:14 }}>
+        <button onClick={exportCSV}
+          style={{ flex:1, padding:"12px", borderRadius:12, border:"none", background:`linear-gradient(135deg,${T.green},#1B5E20)`, color:T.white, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+          📊 تصدير Excel/CSV
+        </button>
+        <button onClick={printReport}
+          style={{ flex:1, padding:"12px", borderRadius:12, border:"none", background:`linear-gradient(135deg,${T.roseDp},#7A3020)`, color:T.white, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+          🖨️ طباعة / PDF
+        </button>
+      </div>
+
+      {/* قائمة الحجوزات */}
+      {loading && <div style={{ textAlign:"center", padding:30, color:T.inkSoft }}>...جاري التحميل</div>}
+      {!loading && bookings.length === 0 && <Empty icon="📋" title="لا توجد حجوزات" desc="جرّب تغيير الفترة أو الفلتر" />}
+
+      <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+        {bookings.map(bk => {
+          const fee = bk.platform_fee || Math.round((bk.total_amount||0)*0.05)
+          const net = (bk.deposit_amount||0) - fee
+          const st = STATUS_LABELS[bk.status] || STATUS_LABELS.pending
+          return (
+            <div key={bk.id} style={{ background:T.white, borderRadius:12, padding:"12px 14px", border:`1px solid ${T.creamDk}` }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                <div>
+                  <span style={{ fontSize:13, fontWeight:700, color:T.ink }}>{bk.client_name}</span>
+                  <span style={{ fontSize:11, color:T.inkSoft, marginRight:8 }}>{bk.appointment_date} · {bk.appointment_time}</span>
+                </div>
+                <span style={{ background:st.bg, color:st.color, fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>{st.label}</span>
+              </div>
+              {bk.service_name && <div style={{ fontSize:11, color:T.roseDp, marginBottom:6 }}>✂️ {bk.service_name}</div>}
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:6 }}>
+                {[
+                  ["الخدمة", (bk.total_amount||0)+" ر.س", T.ink],
+                  ["العربون", (bk.deposit_amount||0)+" ر.س", T.ink],
+                  ["العمولة", fee+" ر.س", "#C62828"],
+                  ["صافيك", net+" ر.س", "#2E7D32"],
+                ].map(r => (
+                  <div key={r[0]} style={{ background:T.cream, borderRadius:8, padding:"6px 8px", textAlign:"center" }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:r[2] }}>{r[1]}</div>
+                    <div style={{ fontSize:9, color:T.inkSoft }}>{r[0]}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function DailyStatement({ salonId }) {
+  const [todayBks, setTodayBks] = useState([])
+  const today = new Date().toISOString().split("T")[0]
+
+  useEffect(() => {
+    if (!salonId) return
+    supabase.from("bookings")
+      .select("*")
+      .eq("salon_id", salonId)
+      .eq("appointment_date", today)
+      .eq("status", "completed")
+      .then(({ data }) => setTodayBks(data || []))
+  }, [salonId])
+
+  if (todayBks.length === 0) return null
+
+  const todayDeposit = todayBks.reduce((s,b) => s + (b.deposit_amount||0), 0)
+  const todayFee     = todayBks.reduce((s,b) => s + (b.platform_fee || Math.round((b.total_amount||0)*0.05)), 0)
+  const todayNet     = todayBks.reduce((s,b) => s + (b.salon_net_amount || (b.deposit_amount||0) - (b.platform_fee||Math.round((b.total_amount||0)*0.05))), 0)
+
+  return (
+    <div style={{ background:`linear-gradient(135deg,#1B5E20,#2E7D32)`, borderRadius:14, padding:"14px 16px", marginBottom:16 }}>
+      <div style={{ fontSize:13, fontWeight:800, color:T.white, marginBottom:10 }}>
+        📊 كشف حساب اليوم — {today}
+      </div>
+      {[
+        ["إجمالي العربونات", todayDeposit + " ر.س"],
+        ["عمولة المنصة (5%)", todayFee + " ر.س"],
+        ["صافي مستحقاتك اليوم", todayNet + " ر.س"],
+        ["عدد الخدمات", todayBks.length + " خدمة"],
+      ].map(r => (
+        <div key={r[0]} style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"4px 0", borderBottom:"1px solid rgba(255,255,255,.15)" }}>
+          <span style={{ color:"rgba(255,255,255,.8)" }}>{r[0]}</span>
+          <span style={{ fontWeight:700, color:T.white }}>{r[1]}</span>
+        </div>
+      ))}
+      <div style={{ fontSize:10, color:"rgba(255,255,255,.6)", marginTop:8, textAlign:"center" }}>
+        سيُحوَّل {todayNet} ر.س لحسابك في نهاية اليوم
+      </div>
+    </div>
+  )
+}
+
+function OwnerFinance({ toast }) {
+  const [bookings, setBookings] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState("pending")
+  const [salonId, setSalonId] = useState(null)
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      const { data: salon } = await supabase.from("salons").select("id").eq("email", session.user.email)
+      if (!salon || !salon[0]) { setLoading(false); return }
+      setSalonId(salon[0].id)
+      const { data } = await supabase.from("bookings")
+        .select("*")
+        .eq("salon_id", salon[0].id)
+        .eq("status", "completed")
+        .order("appointment_date", { ascending: false })
+      setBookings(data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const pending   = bookings.filter(b => b.payment_status !== "settled")
+  const settled   = bookings.filter(b => b.payment_status === "settled")
+
+  const totalPending  = pending.reduce((s,b)  => s + (b.salon_net_amount || (b.deposit_amount||0) - (b.platform_fee || Math.round((b.total_amount||0)*0.05))), 0)
+  const totalSettled  = settled.reduce((s,b)  => s + (b.salon_net_amount || (b.deposit_amount||0) - (b.platform_fee || Math.round((b.total_amount||0)*0.05))), 0)
+  const totalFees     = bookings.reduce((s,b) => s + (b.platform_fee || Math.round((b.total_amount||0)*0.05)), 0)
+
+  const list = tab === "pending" ? pending : settled
+
+  return (
+    <div>
+      <div style={{ fontSize:16, fontWeight:800, color:T.ink, marginBottom:4 }}>💰 بياناتي المالية</div>
+      <div style={{ fontSize:11, color:T.inkSoft, marginBottom:16 }}>تتبع مستحقاتك من العربونات</div>
+
+      {/* ملخص مالي */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
+        <div style={{ background:`linear-gradient(135deg,${T.gold},${T.gold2})`, borderRadius:14, padding:"14px", textAlign:"center" }}>
+          <div style={{ fontSize:22, fontWeight:900, color:T.white }}>{totalPending.toLocaleString()}</div>
+          <div style={{ fontSize:10, color:"rgba(255,255,255,.8)", marginTop:4 }}>⏳ معلق — لم يُحوَّل بعد</div>
+        </div>
+        <div style={{ background:`linear-gradient(135deg,#2E7D32,#1B5E20)`, borderRadius:14, padding:"14px", textAlign:"center" }}>
+          <div style={{ fontSize:22, fontWeight:900, color:T.white }}>{totalSettled.toLocaleString()}</div>
+          <div style={{ fontSize:10, color:"rgba(255,255,255,.8)", marginTop:4 }}>✅ محوَّل لحسابك</div>
+        </div>
+        <div style={{ background:T.white, borderRadius:14, padding:"14px", textAlign:"center", border:`1px solid ${T.creamDk}` }}>
+          <div style={{ fontSize:20, fontWeight:900, color:T.roseDp }}>{(totalPending + totalSettled).toLocaleString()}</div>
+          <div style={{ fontSize:10, color:T.inkSoft, marginTop:4 }}>💼 إجمالي مستحقاتك</div>
+        </div>
+        <div style={{ background:T.white, borderRadius:14, padding:"14px", textAlign:"center", border:`1px solid ${T.creamDk}` }}>
+          <div style={{ fontSize:20, fontWeight:900, color:T.inkSoft }}>{totalFees.toLocaleString()}</div>
+          <div style={{ fontSize:10, color:T.inkSoft, marginTop:4 }}>🏦 عمولة المنصة (5%)</div>
+        </div>
+      </div>
+
+      {/* شرح آلية الدفع */}
+      <div style={{ background:T.goldPale, borderRadius:12, padding:"12px 14px", marginBottom:16, border:`1px solid ${T.goldL}` }}>
+        <div style={{ fontSize:12, fontWeight:700, color:T.ink, marginBottom:6 }}>📌 آلية الدفع اليومية</div>
+        <div style={{ fontSize:11, color:T.inkSoft, lineHeight:1.9 }}>
+          • العربون (30%) يُدفع من العميلة عند الحجز<br/>
+          • المنصة تأخذ 5% عمولة من قيمة الخدمة<br/>
+          • الباقي يُحوَّل لحسابك <strong style={{ color:T.ink }}>يومياً</strong> في نهاية كل يوم<br/>
+          • التحويل عبر بوابة الراجحي للتحويلات الجماعية
+        </div>
+      </div>
+
+      {/* كشف حساب اليوم */}
+      <DailyStatement salonId={salonId} />
+
+      {/* تبويبات */}
+      <div style={{ display:"flex", background:T.white, borderRadius:12, overflow:"hidden", marginBottom:14, border:`1px solid ${T.creamDk}` }}>
+        {[
+          { id:"pending",  label:`⏳ معلق (${pending.length})` },
+          { id:"settled",  label:`✅ محوَّل (${settled.length})` },
+        ].map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            style={{ flex:1, padding:"10px", border:"none", borderBottom:`3px solid ${tab===t.id ? T.roseDp : "transparent"}`, background:"transparent", cursor:"pointer", fontSize:12, fontWeight:tab===t.id ? 700 : 400, color:tab===t.id ? T.roseDp : T.inkSoft, fontFamily:"Tajawal,sans-serif" }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {loading && <div style={{ textAlign:"center", padding:30, color:T.inkSoft }}>...جاري التحميل</div>}
+      {!loading && list.length === 0 && <Empty icon="💰" title="لا توجد معاملات" desc={tab==="pending" ? "كل مستحقاتك محوَّلة ✅" : "لم يتم تحويل أي مبالغ بعد"} />}
+
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        {list.map(bk => {
+          const netAmount = bk.salon_net_amount || (bk.deposit_amount||0) - (bk.platform_fee || Math.round((bk.total_amount||0)*0.05))
+          const fee = bk.platform_fee || Math.round((bk.total_amount||0)*0.05)
+          return (
+            <div key={bk.id} style={{ background:T.white, borderRadius:14, padding:"14px 16px", border:`1.5px solid ${bk.payment_status==="settled" ? "#E8F5E9" : T.roseL}` }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{bk.client_name}</div>
+                  <div style={{ fontSize:11, color:T.inkSoft }}>📅 {bk.appointment_date} · ⏰ {bk.appointment_time}</div>
+                  {bk.service_name && <div style={{ fontSize:11, color:T.roseDp }}>✂️ {bk.service_name}</div>}
+                </div>
+                <span style={{ background:bk.payment_status==="settled" ? "#E8F5E9" : T.roseL, color:bk.payment_status==="settled" ? T.green : T.roseDp, fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20 }}>
+                  {bk.payment_status === "settled" ? "✅ محوَّل" : "⏳ معلق"}
+                </span>
+              </div>
+
+              <div style={{ background:T.cream, borderRadius:10, padding:"10px 12px" }}>
+                {[
+                  ["قيمة الخدمة", (bk.total_amount||0) + " ر.س", T.ink],
+                  ["العربون المدفوع (30%)", (bk.deposit_amount||0) + " ر.س", T.ink],
+                  ["عمولة المنصة (5%)", fee + " ر.س", "#C62828"],
+                  ["نصيبك من العربون", netAmount + " ر.س", T.green],
+                ].map(r => (
+                  <div key={r[0]} style={{ display:"flex", justifyContent:"space-between", fontSize:11, padding:"3px 0", borderBottom:`1px solid ${T.creamDk}` }}>
+                    <span style={{ color:T.inkSoft }}>{r[0]}</span>
+                    <span style={{ fontWeight:700, color:r[2] }}>{r[1]}</span>
+                  </div>
+                ))}
+              </div>
+
+              {bk.payment_status === "settled" && bk.updated_at && (
+                <div style={{ fontSize:10, color:T.green, marginTop:6, textAlign:"left" }}>
+                  ✅ تم التحويل: {new Date(bk.updated_at).toLocaleDateString("ar-SA")}
+                </div>
+              )}
+              {bk.payment_status !== "settled" && (
+                <div style={{ fontSize:10, color:T.inkSoft, marginTop:6, textAlign:"left" }}>
+                  ⏳ التحويل في نهاية اليوم
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function OwnerTerms() {
   const [tab, setTab] = useState("platform")
 
@@ -3326,8 +4479,7 @@ function OwnerTerms() {
     { t:"١. رسوم التأسيس", b:"تُدفع مرة واحدة عند الانضمام للمنصة." },
     { t:"٢. رسوم الاشتراك", b:"تُدفع شهرياً أو سنوياً حسب الباقة. السنوي = 11 شهراً فقط (شهر مجاني)." },
     { t:"٣. التجربة المجانية", b:"14 يوماً مجاناً — مرة واحدة فقط لكل صالون بالإيميل ورقم الجوال." },
-    { t:"٤. عمولة المنصة", b:"5% من قيمة الخدمة تُخصم من العربون.
-مثال: خدمة 200 ر.س → عربون 60 ر.س → عمولة 10 ر.س → يُحوَّل للصالون 50 ر.س خلال 24-48 ساعة." },
+    { t:"٤. عمولة المنصة", b:"5% من قيمة الخدمة تُخصم من العربون.\nمثال: خدمة 200 ر.س → عربون 60 ر.س → عمولة 10 ر.س → يُحوَّل للصالون 50 ر.س خلال 24-48 ساعة." },
     { t:"٥. ترقية الباقة", b:"يمكن الترقية في أي وقت بدفع الفرق + 100 ر.س رسوم ترقية. يُفعَّل فور الدفع." },
     { t:"٦. تخفيض الباقة", b:"لا يمكن تخفيض الباقة إلا بعد انتهاء الاشتراك الحالي." },
     { t:"٧. إيقاف الحساب", b:"للمنصة حق إيقاف الحساب المخالف للشروط بعد إشعار مسبق." },
@@ -3343,14 +4495,25 @@ function OwnerTerms() {
 
   return (
     <div>
+      {/* بطاقة التسوية المالية */}
+      <div style={{ background:`linear-gradient(135deg,#1B5E20,#2E7D32)`, borderRadius:14, padding:"14px 16px", marginBottom:12 }}>
+        <div style={{ fontSize:13, fontWeight:800, color:T.white, marginBottom:8 }}>📅 التسوية المالية الأسبوعية</div>
+        <div style={{ fontSize:12, color:"rgba(255,255,255,.85)", lineHeight:1.9 }}>
+          • يوم التسوية: <strong style={{ color:T.white }}>كل يوم سبت</strong><br/>
+          • العمولة: <strong style={{ color:T.white }}>5% من قيمة الخدمة</strong> تُخصم من العربون<br/>
+          • التحويل: لرقم الآيبان المسجّل في الإعدادات<br/>
+          • تابع مستحقاتك من تبويب <strong style={{ color:T.white }}>💰 المالية</strong>
+        </div>
+      </div>
+
       {/* ملخص العمولة */}
       <div style={{ background:`linear-gradient(135deg,${T.goldPale},#FFFBF0)`, borderRadius:14, padding:"14px 16px", marginBottom:16, border:`1px solid ${T.goldL}` }}>
         <div style={{ fontSize:13, fontWeight:800, color:T.ink, marginBottom:10 }}>💰 مثال — خدمة 200 ر.س</div>
         {[
           ["العربون (30%)", "60 ر.س", T.ink],
           ["عمولة المنصة (5%)", "10 ر.س", "#C62828"],
-          ["يُحوَّل للصالون", "50 ر.س", "#2E7D32"],
-          ["الباقي عند الخدمة", "140 ر.س", T.roseDp],
+          ["يُحوَّل للصالون يوم السبت", "50 ر.س", "#2E7D32"],
+          ["الباقي يُدفع عند الخدمة", "140 ر.س", T.roseDp],
         ].map(r => (
           <div key={r[0]} style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"4px 0", borderBottom:`1px solid ${T.creamDk}` }}>
             <span style={{ color:T.inkSoft }}>{r[0]}</span>
@@ -3375,7 +4538,7 @@ function OwnerTerms() {
       {(tab === "platform" ? platformTerms : clientTerms).map(s => (
         <div key={s.t} style={{ marginBottom:12, background:T.white, borderRadius:12, padding:"14px 16px" }}>
           <div style={{ fontSize:13, fontWeight:800, color:T.ink, marginBottom:6 }}>{s.t}</div>
-          <div style={{ fontSize:12, color:T.inkSoft, lineHeight:1.8, whiteSpace:"pre-line" }}>{s.b}</div>
+          <div style={{ fontSize:12, color:T.inkSoft, lineHeight:1.9, whiteSpace:"pre-line" }}>{s.b}</div>
         </div>
       ))}
 
@@ -3387,7 +4550,7 @@ function OwnerTerms() {
 }
 
 function OwnerSettings({ toast }) {
-  const [form, setForm] = useState({ salonName:"", ownerName:"", phone:"", email:"", city:"", bio:"", wa:"", insta:"", mapUrl:"", imageUrl:"" })
+  const [form, setForm] = useState({ salonName:"", ownerName:"", phone:"", email:"", city:"", bio:"", wa:"", insta:"", mapUrl:"", imageUrl:"", iban:"", bank_name:"" })
   const [photos, setPhotos] = useState([])
   const [focusF, setFocusF] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -3415,6 +4578,8 @@ function OwnerSettings({ toast }) {
             insta: s.insta || "",
             mapUrl: s.map_url || "",
             imageUrl: s.image_url || "",
+            iban: s.iban || "",
+            bank_name: s.bank_name || "",
           })
           setSalonImages(s.gallery || (s.image_url ? [s.image_url] : []))
         }
@@ -3433,6 +4598,8 @@ function OwnerSettings({ toast }) {
       bio: form.bio,
       insta: form.insta,
       map_url: form.mapUrl,
+      iban: form.iban,
+      bank_name: form.bank_name,
     }).eq('id', salonId)
     setSaving(false)
     if (error) { toast("⚠ حدث خطأ: " + error.message); return }
@@ -4399,6 +5566,409 @@ function MyBookingsPage({ setScreen }) {
 /* ══════════════════════════════════════════
    👑 ADMIN DASHBOARD
 ══════════════════════════════════════════ */
+
+
+function ManualDepositEntry({ bookings, onUpdate, toast }) {
+  const [selected, setSelected] = useState("")
+  const [amount, setAmount] = useState("")
+  const [saving, setSaving] = useState(false)
+
+  // الحجوزات المكتملة بدون عربون مُدخل
+  const incomplete = bookings.filter(b => !b.deposit_amount || b.deposit_amount === 0)
+  const allBookings = bookings
+
+  const save = async () => {
+    if (!selected || !amount) { toast("⚠ اختر حجزاً وأدخل المبلغ"); return }
+    setSaving(true)
+    const bk = allBookings.find(b => b.id === selected)
+    if (!bk) { setSaving(false); return }
+    const deposit = Number(amount)
+    const platformFee = Math.round((bk.total_amount||0) * 0.05)
+    const salonNet = deposit - platformFee
+
+    await supabase.from("bookings").update({
+      deposit_amount: deposit,
+      platform_fee: platformFee,
+      salon_net_amount: salonNet,
+      salon_amount: salonNet,
+    }).eq("id", selected)
+
+    setSaving(false)
+    setSelected("")
+    setAmount("")
+    toast("✅ تم تسجيل العربون!")
+    onUpdate()
+  }
+
+  const selectedBk = allBookings.find(b => b.id === selected)
+  const previewDeposit = Number(amount) || 0
+  const previewFee = selectedBk ? Math.round((selectedBk.total_amount||0) * 0.05) : 0
+  const previewNet = previewDeposit - previewFee
+
+  return (
+    <div>
+      <div style={{ marginBottom:10 }}>
+        <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:5 }}>اختر الحجز</label>
+        <select value={selected} onChange={e => setSelected(e.target.value)}
+          style={{ width:"100%", padding:"10px 12px", border:`1.5px solid ${T.rose}`, borderRadius:10, fontSize:12, fontFamily:"Tajawal,sans-serif", background:T.white, color:T.ink, outline:"none" }}>
+          <option value="">— اختر حجزاً —</option>
+          {allBookings.map(b => (
+            <option key={b.id} value={b.id}>
+              {b.client_name} · {b.appointment_date} · {b.total_amount||0} ر.س
+              {b.deposit_amount > 0 ? " ✅" : " ⏳"}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div style={{ marginBottom:10 }}>
+        <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:5 }}>مبلغ العربون المستلم (ر.س)</label>
+        <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
+          placeholder={selectedBk ? "المقترح: " + Math.round((selectedBk.total_amount||0)*0.3) : "0"}
+          style={{ width:"100%", padding:"10px 12px", border:`1.5px solid ${T.rose}`, borderRadius:10, fontSize:14, fontFamily:"Tajawal,sans-serif", background:T.white, color:T.ink, outline:"none" }} />
+      </div>
+
+      {/* معاينة التوزيع */}
+      {amount > 0 && selectedBk && (
+        <div style={{ background:T.white, borderRadius:10, padding:"10px 12px", marginBottom:10 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:T.ink, marginBottom:6 }}>معاينة التوزيع:</div>
+          {[
+            ["قيمة الخدمة", (selectedBk.total_amount||0) + " ر.س", T.ink],
+            ["العربون المستلم", previewDeposit + " ر.س", T.ink],
+            ["عمولة المنصة (5%)", previewFee + " ر.س", "#C62828"],
+            ["صافي الصالون", previewNet + " ر.س", "#2E7D32"],
+          ].map(r => (
+            <div key={r[0]} style={{ display:"flex", justifyContent:"space-between", fontSize:11, padding:"3px 0", borderBottom:`1px solid ${T.creamDk}` }}>
+              <span style={{ color:T.inkSoft }}>{r[0]}</span>
+              <span style={{ fontWeight:700, color:r[2] }}>{r[1]}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <button onClick={save} disabled={saving}
+        style={{ width:"100%", padding:"10px", borderRadius:10, border:"none", background:T.roseDp, color:T.white, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+        {saving ? "...جاري الحفظ" : "✓ تسجيل العربون"}
+      </button>
+    </div>
+  )
+}
+
+function AdminSettlement() {
+  const [bookings, setBookings] = useState([])
+  const [salons, setSalons] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [dayFilter, setDayFilter] = useState("today")
+  const [selectedSalon, setSelectedSalon] = useState("all")
+  const [settling, setSettling] = useState(false)
+  const [autoSettle, setAutoSettle] = useState(false)
+  const toast = useToast()
+
+  useEffect(() => { loadData() }, [dayFilter])
+
+  const getDayRange = () => {
+    const now = new Date()
+    const today = now.toISOString().split("T")[0]
+    const yesterday = new Date(now)
+    yesterday.setDate(now.getDate() - 1)
+    const yesterdayStr = yesterday.toISOString().split("T")[0]
+    const week = new Date(now)
+    week.setDate(now.getDate() - 7)
+    const weekStr = week.toISOString().split("T")[0]
+
+    if (dayFilter === "today")     return { from: today,        to: today,     label: "اليوم" }
+    if (dayFilter === "yesterday") return { from: yesterdayStr, to: yesterdayStr, label: "أمس" }
+    if (dayFilter === "week")      return { from: weekStr,      to: today,     label: "آخر 7 أيام" }
+    return { from: today, to: today, label: "اليوم" }
+  }
+
+  const loadData = async () => {
+    setLoading(true)
+    const { from, to } = getDayRange()
+    const { data: bks } = await supabase.from("bookings")
+      .select("*, salons(name, phone, iban, bank_name)")
+      .gte("appointment_date", from)
+      .lte("appointment_date", to)
+      .eq("status", "completed")
+    const { data: sls } = await supabase.from("salons").select("id,name,phone,iban,bank_name")
+    setBookings(bks || [])
+    setSalons(sls || [])
+    setLoading(false)
+  }
+
+  // تجميع مستحقات كل صالون
+  const getSalonSummary = () => {
+    const summary = {}
+    const filtered = selectedSalon === "all" ? bookings : bookings.filter(b => b.salon_id === selectedSalon)
+    filtered.forEach(b => {
+      const sid = b.salon_id
+      if (!summary[sid]) {
+        summary[sid] = {
+          salonId: sid,
+          name: b.salons?.name || "صالون",
+          phone: b.salons?.phone || "",
+          iban: b.salons?.iban || "—",
+          bank: b.salons?.bank_name || "—",
+          totalSales: 0,
+          platformFee: 0,
+          netAmount: 0,
+          bookingsCount: 0,
+          pendingCount: 0,
+        }
+      }
+      summary[sid].totalSales += b.total_amount || 0
+      summary[sid].platformFee += b.platform_fee || Math.round((b.total_amount||0) * 0.05)
+      summary[sid].netAmount += b.salon_net_amount || (b.deposit_amount || 0) - (b.platform_fee || Math.round((b.total_amount||0) * 0.05))
+      summary[sid].bookingsCount++
+      if (b.payment_status !== "settled") summary[sid].pendingCount++
+    })
+    return Object.values(summary)
+  }
+
+  const summary = getSalonSummary()
+  const totalPlatformFee = summary.reduce((s, x) => s + x.platformFee, 0)
+  const totalNet = summary.reduce((s, x) => s + x.netAmount, 0)
+  const pendingSalons = summary.filter(s => s.pendingCount > 0)
+
+  // تصدير CSV
+  const exportCSV = () => {
+    const { from, to, label } = getDayRange()
+    const rows = [
+      ["اسم الصالون", "رقم الآيبان", "البنك", "إجمالي المبيعات", "عمولة المنصة", "صافي المستحقات", "عدد الحجوزات"],
+      ...pendingSalons.map(s => [s.name, s.iban, s.bank, s.totalSales, s.platformFee, s.netAmount, s.bookingsCount])
+    ]
+    const csv = rows.map(r => r.join(",")).join("\n")
+    const blob = new Blob(["" + csv], { type: "text/csv;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "تسوية_يومية_بيوتي_تيك_" + from + ".csv"
+    a.click()
+    toast("✅ تم تصدير ملف التسوية!")
+  }
+
+  // اعتماد التحويل
+  const settleAll = async () => {
+    if (pendingSalons.length === 0) { toast("لا توجد مستحقات معلقة"); return }
+    setSettling(true)
+    const pendingIds = bookings.filter(b => b.payment_status !== "settled").map(b => b.id)
+    await supabase.from("bookings").update({ payment_status: "settled" }).in("id", pendingIds)
+    toast("✅ تم اعتماد التحويل لـ " + pendingSalons.length + " صالون")
+    setSettling(false)
+    loadData()
+  }
+
+  const { from, to, label } = getDayRange()
+
+  return (
+    <div>
+      <div style={{ fontSize:16, fontWeight:800, color:T.ink, marginBottom:6 }}>💳 إدارة التسوية المالية</div>
+      <div style={{ fontSize:12, color:T.inkSoft, marginBottom:16 }}>يوم التسوية: كل يوم سبت</div>
+
+      {/* فلاتر يومية */}
+      <div style={{ display:"flex", gap:6, marginBottom:12 }}>
+        {[
+          { id:"today",     label:"اليوم" },
+          { id:"yesterday", label:"أمس" },
+          { id:"week",      label:"7 أيام" },
+        ].map(d => (
+          <button key={d.id} onClick={() => setDayFilter(d.id)}
+            style={{ flex:1, padding:"9px", borderRadius:10, border:`2px solid ${dayFilter===d.id ? T.roseDp : T.creamDk}`, background:dayFilter===d.id ? T.roseL : T.white, color:dayFilter===d.id ? T.roseDp : T.inkSoft, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+            {d.label}
+          </button>
+        ))}
+      </div>
+
+      {/* تفعيل التسوية التلقائية */}
+      <div style={{ background:autoSettle ? T.greenL : T.cream, borderRadius:12, padding:"12px 14px", marginBottom:12, border:`1px solid ${autoSettle ? T.green : T.creamDk}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+        <div>
+          <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>⚡ التسوية التلقائية اليومية</div>
+          <div style={{ fontSize:11, color:T.inkSoft }}>تجهيز ملف CSV يومياً تلقائياً</div>
+        </div>
+        <button onClick={() => { setAutoSettle(!autoSettle); toast(autoSettle ? "تم إيقاف التسوية التلقائية" : "✅ تم تفعيل التسوية التلقائية اليومية") }}
+          style={{ padding:"7px 14px", borderRadius:20, border:"none", background:autoSettle ? T.green : T.creamDk, color:autoSettle ? T.white : T.inkSoft, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+          {autoSettle ? "مفعّل ✓" : "تفعيل"}
+        </button>
+      </div>
+
+      <div style={{ fontSize:11, color:T.inkSoft, marginBottom:16, background:T.cream, padding:"8px 12px", borderRadius:8 }}>
+        📅 الفترة: {from} — {to} · {label}
+      </div>
+
+      {/* ملخص إجمالي */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:16 }}>
+        <div style={{ background:`linear-gradient(135deg,${T.gold},${T.gold2})`, borderRadius:12, padding:"12px", textAlign:"center" }}>
+          <div style={{ fontSize:18, fontWeight:900, color:T.white }}>{totalNet.toLocaleString()}</div>
+          <div style={{ fontSize:9, color:"rgba(255,255,255,.8)" }}>إجمالي المحولات</div>
+        </div>
+        <div style={{ background:`linear-gradient(135deg,${T.roseDp},#7A3020)`, borderRadius:12, padding:"12px", textAlign:"center" }}>
+          <div style={{ fontSize:18, fontWeight:900, color:T.white }}>{totalPlatformFee.toLocaleString()}</div>
+          <div style={{ fontSize:9, color:"rgba(255,255,255,.8)" }}>عمولة المنصة</div>
+        </div>
+        <div style={{ background:T.white, borderRadius:12, padding:"12px", textAlign:"center", border:`1px solid ${T.creamDk}` }}>
+          <div style={{ fontSize:18, fontWeight:900, color:T.roseDp }}>{pendingSalons.length}</div>
+          <div style={{ fontSize:9, color:T.inkSoft }}>صالون معلق</div>
+        </div>
+      </div>
+
+      {/* أزرار التصدير والاعتماد */}
+      <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+        <button onClick={exportCSV}
+          style={{ flex:1, padding:"11px", borderRadius:12, border:"none", background:`linear-gradient(135deg,${T.green},#1B5E20)`, color:T.white, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+          📊 تصدير CSV
+        </button>
+        <button onClick={settleAll} disabled={settling}
+          style={{ flex:1, padding:"11px", borderRadius:12, border:"none", background:`linear-gradient(135deg,${T.gold},${T.gold2})`, color:T.white, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+          {settling ? "...جاري" : "✅ اعتماد التحويل"}
+        </button>
+      </div>
+
+      {/* إدخال عربون يدوي — مؤقت قبل بوابة الدفع */}
+      <div style={{ background:T.roseL, borderRadius:14, padding:"14px 16px", marginBottom:16, border:`1.5px solid ${T.rose}` }}>
+        <div style={{ fontSize:13, fontWeight:800, color:T.roseDp, marginBottom:4 }}>🧪 وضع تجريبي — إدخال عربون يدوي</div>
+        <div style={{ fontSize:11, color:T.inkSoft, marginBottom:12 }}>قبل ربط بوابة الدفع — أدخل العربون يدوياً لكل حجز</div>
+        <ManualDepositEntry bookings={bookings} onUpdate={loadData} toast={toast} />
+      </div>
+
+      {/* جدول التسوية */}
+      {loading && <div style={{ textAlign:"center", padding:30, color:T.inkSoft }}>...جاري التحميل</div>}
+      {!loading && summary.length === 0 && <Empty icon="💳" title="لا توجد مستحقات" desc="لا توجد حجوزات مكتملة في هذه الفترة" />}
+
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        {summary.map(s => (
+          <div key={s.salonId} style={{ background:T.white, borderRadius:14, padding:"14px 16px", border:`1.5px solid ${s.pendingCount > 0 ? T.roseL : T.creamDk}` }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
+              <div>
+                <div style={{ fontSize:14, fontWeight:800, color:T.ink }}>{s.name}</div>
+                <div style={{ fontSize:11, color:T.inkSoft }}>📞 {s.phone}</div>
+              </div>
+              <span style={{ background:s.pendingCount > 0 ? T.roseL : T.greenL, color:s.pendingCount > 0 ? T.roseDp : T.green, fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20 }}>
+                {s.pendingCount > 0 ? s.pendingCount + " معلق" : "✅ مسوّى"}
+              </span>
+            </div>
+            <div style={{ background:T.cream, borderRadius:10, padding:"10px 12px", marginBottom:10 }}>
+              {[
+                ["إجمالي المبيعات", s.totalSales.toLocaleString() + " ر.س", T.ink],
+                ["عمولة المنصة (5%)", s.platformFee.toLocaleString() + " ر.س", T.red||"#C62828"],
+                ["صافي المستحقات", s.netAmount.toLocaleString() + " ر.س", T.green],
+                ["عدد الحجوزات", s.bookingsCount + " حجز", T.inkSoft],
+              ].map(r => (
+                <div key={r[0]} style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"4px 0", borderBottom:`1px solid ${T.creamDk}` }}>
+                  <span style={{ color:T.inkSoft }}>{r[0]}</span>
+                  <span style={{ fontWeight:700, color:r[2] }}>{r[1]}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize:11, color:T.inkSoft }}>
+              🏦 آيبان: <span style={{ color:T.ink, fontWeight:600 }}>{s.iban}</span>
+              {s.bank !== "—" && <span> · {s.bank}</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+
+function AdminSalonsList({ salonsList, onUpdate }) {
+  const [editId, setEditId] = useState(null)
+  const [newPkg, setNewPkg] = useState("")
+  const [saving, setSaving] = useState(false)
+  const toast = useToast()
+  const [search, setSearch] = useState("")
+
+  const filtered = salonsList.filter(s =>
+    s.name?.toLowerCase().includes(search.toLowerCase()) ||
+    s.phone?.includes(search) ||
+    s.email?.toLowerCase().includes(search.toLowerCase())
+  )
+
+  const changePkg = async (salonId, pkg) => {
+    setSaving(true)
+    const { error } = await supabase.from("salons").update({ package: pkg }).eq("id", salonId)
+    setSaving(false)
+    if (error) { toast("⚠ حدث خطأ"); return }
+    toast("✅ تم تغيير الباقة!")
+    setEditId(null)
+    onUpdate()
+  }
+
+  const PKG_LABELS = {
+    basic: { label:"📦 أساسية", color:T.inkSoft, bg:T.creamDk },
+    pro:   { label:"⚡ توسع",   color:T.gold,    bg:T.goldPale },
+    elite: { label:"✦ نخبة",   color:T.roseDp,  bg:T.roseL },
+  }
+
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+        <div style={{ fontSize:15, fontWeight:800, color:T.ink }}>
+          الصالونات ({salonsList.length})
+        </div>
+      </div>
+
+      {/* بحث */}
+      <input value={search} onChange={e => setSearch(e.target.value)}
+        placeholder="ابحث باسم أو جوال أو إيميل..."
+        style={{ width:"100%", padding:"10px 14px", border:`1.5px solid ${T.creamDk}`, borderRadius:12, fontSize:13, fontFamily:"Tajawal,sans-serif", background:T.white, outline:"none", marginBottom:14 }} />
+
+      {filtered.length === 0 && <Empty icon="🏪" title="لا توجد نتائج" desc="" />}
+
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        {filtered.map(s => (
+          <Card key={s.id} style={{ padding:16 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
+              <div>
+                <div style={{ fontSize:14, fontWeight:800, color:T.ink }}>{s.name}</div>
+                <div style={{ fontSize:12, color:T.inkSoft, marginTop:2 }}>{s.phone} · {s.email}</div>
+                <div style={{ fontSize:12, color:T.inkSoft }}>📍 {s.city}</div>
+                <div style={{ fontSize:11, color:T.inkMuted }}>
+                  {new Date(s.created_at).toLocaleDateString("ar-SA")}
+                  {s.trial_end && ` · تجربة حتى: ${new Date(s.trial_end).toLocaleDateString("ar-SA")}`}
+                </div>
+              </div>
+              <span style={{ background:PKG_LABELS[s.package||"basic"]?.bg, color:PKG_LABELS[s.package||"basic"]?.color, fontSize:11, fontWeight:700, padding:"4px 12px", borderRadius:20 }}>
+                {PKG_LABELS[s.package||"basic"]?.label}
+              </span>
+            </div>
+
+            {/* تغيير الباقة */}
+            {editId === s.id ? (
+              <div style={{ background:T.cream, borderRadius:10, padding:"12px" }}>
+                <div style={{ fontSize:12, fontWeight:700, color:T.ink, marginBottom:10 }}>اختر الباقة الجديدة:</div>
+                <div style={{ display:"flex", gap:8, marginBottom:10 }}>
+                  {Object.entries(PKG_LABELS).map(([id, p]) => (
+                    <button key={id} onClick={() => setNewPkg(id)}
+                      style={{ flex:1, padding:"9px 6px", borderRadius:10, border:`2px solid ${newPkg===id ? T.roseDp : T.creamDk}`, background:newPkg===id ? T.roseL : T.white, color:newPkg===id ? T.roseDp : T.inkSoft, fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={() => setEditId(null)}
+                    style={{ flex:1, padding:"9px", borderRadius:10, border:`1px solid ${T.creamDk}`, background:T.white, color:T.inkSoft, fontSize:12, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    إلغاء
+                  </button>
+                  <button onClick={() => newPkg && changePkg(s.id, newPkg)} disabled={!newPkg || saving}
+                    style={{ flex:2, padding:"9px", borderRadius:10, border:"none", background:newPkg ? T.roseDp : T.creamDk, color:T.white, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    {saving ? "...جاري" : "✓ تأكيد التغيير"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => { setEditId(s.id); setNewPkg(s.package||"basic") }}
+                style={{ width:"100%", padding:"9px", borderRadius:10, border:`1.5px solid ${T.roseL}`, background:T.white, color:T.roseDp, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                🔄 تغيير الباقة
+              </button>
+            )}
+          </Card>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function AdminDashboard({ setScreen }) {
   const toast = useToast()
   const [tab, setTab] = useState("stats")
@@ -4464,9 +6034,10 @@ function AdminDashboard({ setScreen }) {
   )
 
   const ADMIN_TABS = [
-    { id:"stats",    label:"الإحصائيات", icon:"📊" },
-    { id:"salons",   label:"الصالونات",  icon:"🏪" },
-    { id:"packages", label:"الباقات",    icon:"📦" },
+    { id:"stats",      label:"الإحصائيات", icon:"📊" },
+    { id:"settlement", label:"التسوية",    icon:"💳" },
+    { id:"salons",     label:"الصالونات",  icon:"🏪" },
+    { id:"packages",   label:"الباقات",    icon:"📦" },
   ]
 
   return (
@@ -4623,38 +6194,14 @@ function AdminDashboard({ setScreen }) {
         )}
 
         {tab === "salons" && (
-          <div>
-            <div style={{ fontSize:15, fontWeight:800, color:T.ink, marginBottom:14 }}>
-              الصالونات المسجّلة ({salonsList.length})
-            </div>
-            {salonsList.length === 0
-              ? <Empty icon="🏪" title="لا توجد صالونات بعد" desc="ستظهر هنا فور تسجيل الصالونات" />
-              : <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-                  {salonsList.map(s => (
-                    <Card key={s.id} style={{ padding:16 }}>
-                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
-                        <div>
-                          <div style={{ fontSize:14, fontWeight:800, color:T.ink }}>{s.name}</div>
-                          <div style={{ fontSize:12, color:T.inkSoft, marginTop:3 }}>{s.owner_name} — {s.phone}</div>
-                          <div style={{ fontSize:12, color:T.inkSoft }}>{s.email}</div>
-                          <div style={{ fontSize:12, color:T.inkSoft }}>📍 {s.city}</div>
-                        </div>
-                        <div style={{ textAlign:"left" }}>
-                          <span style={{ background:s.package==="elite"?T.roseL:s.package==="pro"?T.goldPale:T.creamDk, color:s.package==="elite"?T.roseDp:s.package==="pro"?T.gold:T.inkSoft, fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20, display:"block", marginBottom:4 }}>
-                            {s.package === "elite" ? "✦ نخبة" : s.package === "pro" ? "⚡ توسع" : "📦 أساسية"}
-                          </span>
-                          <div style={{ fontSize:10, color:T.inkSoft }}>
-                            {new Date(s.created_at).toLocaleDateString("ar-SA")}
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-            }
-          </div>
+          <AdminSalonsList salonsList={salonsList} onUpdate={() => {
+            supabase.from("salons").select("*").then(({ data }) => {
+              if (data) setSalonsList(data)
+            })
+          }} />
         )}
 
+        {tab === "settlement" && <AdminSettlement />}
         {tab === "packages" && (
           <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
             {PKGS.map(p => (
@@ -4843,6 +6390,7 @@ export default function App() {
     if (screen === "client-register") return <ClientRegister setScreen={go} />
     if (screen === "booking")         return <BookingPage salon={salon} setScreen={go} />
     if (screen === "salon-detail")     return <SalonDetailPage salon={salon} setScreen={go} setSalon={setSalon} />
+    if (screen === "compare")           return <ComparePage setScreen={go} setSalon={setSalon} />
     if (screen === "owner-register")  return <OwnerRegister setScreen={go} />
     if (screen === "owner-login")     return <OwnerLogin setScreen={go} />
     if (screen === "owner-dashboard") return <OwnerDashboard setScreen={go} />
