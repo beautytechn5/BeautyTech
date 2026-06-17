@@ -1675,6 +1675,7 @@ const ALL_OWN_TABS = [
   { id:"whatsapp",  icon:"💬", label:"بوت واتساب" },
   { id:"package",   icon:"📦", label:"باقتي" },
   { id:"settings",  icon:"⚙️",  label:"الإعدادات" },
+  { id:"terms",     icon:"📋", label:"الشروط" },
 ]
 
 function OwnerDashboard({ setScreen }) {
@@ -1758,6 +1759,7 @@ function OwnerDashboard({ setScreen }) {
         {tab === "inventory" && <OwnerInventory toast={toast} />}
         {tab === "whatsapp"  && <OwnerWhatsapp toast={toast} />}
         {tab === "settings"  && <OwnerSettings toast={toast} />}
+        {tab === "terms"     && <OwnerTerms />}
         {tab === "package"   && <OwnerPackage toast={toast} />}
         {tab === "offers"    && <OwnerOffers toast={toast} type="offer" />}
         {tab === "packages"  && <OwnerOffers toast={toast} type="package" />}
@@ -3316,6 +3318,74 @@ function OwnerPackage({ toast }) {
   )
 }
 
+
+function OwnerTerms() {
+  const [tab, setTab] = useState("platform")
+
+  const platformTerms = [
+    { t:"١. رسوم التأسيس", b:"تُدفع مرة واحدة عند الانضمام للمنصة." },
+    { t:"٢. رسوم الاشتراك", b:"تُدفع شهرياً أو سنوياً حسب الباقة. السنوي = 11 شهراً فقط (شهر مجاني)." },
+    { t:"٣. التجربة المجانية", b:"14 يوماً مجاناً — مرة واحدة فقط لكل صالون بالإيميل ورقم الجوال." },
+    { t:"٤. عمولة المنصة", b:"5% من قيمة الخدمة تُخصم من العربون.
+مثال: خدمة 200 ر.س → عربون 60 ر.س → عمولة 10 ر.س → يُحوَّل للصالون 50 ر.س خلال 24-48 ساعة." },
+    { t:"٥. ترقية الباقة", b:"يمكن الترقية في أي وقت بدفع الفرق + 100 ر.س رسوم ترقية. يُفعَّل فور الدفع." },
+    { t:"٦. تخفيض الباقة", b:"لا يمكن تخفيض الباقة إلا بعد انتهاء الاشتراك الحالي." },
+    { t:"٧. إيقاف الحساب", b:"للمنصة حق إيقاف الحساب المخالف للشروط بعد إشعار مسبق." },
+  ]
+
+  const clientTerms = [
+    { t:"١. توزيع العربون", b:"العربون (30%): 5% للمنصة + 25% للصالون خلال 24-48 ساعة." },
+    { t:"٢. التزامات الصالون", b:"تقديم الخدمة بالوقت والجودة والسعر المعلن." },
+    { t:"٣. الإلغاء من الصالون", b:"لو الصالون ألغى، يُرد العربون كاملاً للعميلة." },
+    { t:"٤. التسعير", b:"يُحظر تغيير السعر بعد الحجز أو إضافة رسوم غير معلنة." },
+    { t:"٥. حل النزاعات", b:"المنصة تتدخل للوساطة وقرارها ملزم للطرفين." },
+  ]
+
+  return (
+    <div>
+      {/* ملخص العمولة */}
+      <div style={{ background:`linear-gradient(135deg,${T.goldPale},#FFFBF0)`, borderRadius:14, padding:"14px 16px", marginBottom:16, border:`1px solid ${T.goldL}` }}>
+        <div style={{ fontSize:13, fontWeight:800, color:T.ink, marginBottom:10 }}>💰 مثال — خدمة 200 ر.س</div>
+        {[
+          ["العربون (30%)", "60 ر.س", T.ink],
+          ["عمولة المنصة (5%)", "10 ر.س", "#C62828"],
+          ["يُحوَّل للصالون", "50 ر.س", "#2E7D32"],
+          ["الباقي عند الخدمة", "140 ر.س", T.roseDp],
+        ].map(r => (
+          <div key={r[0]} style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"4px 0", borderBottom:`1px solid ${T.creamDk}` }}>
+            <span style={{ color:T.inkSoft }}>{r[0]}</span>
+            <span style={{ fontWeight:700, color:r[2] }}>{r[1]}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* تبويبات */}
+      <div style={{ display:"flex", background:T.white, borderRadius:12, overflow:"hidden", marginBottom:14, border:`1px solid ${T.creamDk}` }}>
+        {[
+          { id:"platform", label:"المنصة والصالون" },
+          { id:"client",   label:"الصالون والعميلة" },
+        ].map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            style={{ flex:1, padding:"10px", border:"none", borderBottom:`3px solid ${tab===t.id ? T.roseDp : "transparent"}`, background:"transparent", cursor:"pointer", fontSize:12, fontWeight:tab===t.id ? 700 : 400, color:tab===t.id ? T.roseDp : T.inkSoft, fontFamily:"Tajawal,sans-serif" }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {(tab === "platform" ? platformTerms : clientTerms).map(s => (
+        <div key={s.t} style={{ marginBottom:12, background:T.white, borderRadius:12, padding:"14px 16px" }}>
+          <div style={{ fontSize:13, fontWeight:800, color:T.ink, marginBottom:6 }}>{s.t}</div>
+          <div style={{ fontSize:12, color:T.inkSoft, lineHeight:1.8, whiteSpace:"pre-line" }}>{s.b}</div>
+        </div>
+      ))}
+
+      <div style={{ textAlign:"center", marginTop:16, fontSize:12, color:T.inkSoft }}>
+        للاستفسار: 0552401658
+      </div>
+    </div>
+  )
+}
+
 function OwnerSettings({ toast }) {
   const [form, setForm] = useState({ salonName:"", ownerName:"", phone:"", email:"", city:"", bio:"", wa:"", insta:"", mapUrl:"", imageUrl:"" })
   const [photos, setPhotos] = useState([])
@@ -4413,10 +4483,16 @@ function AdminDashboard({ setScreen }) {
           style={{ padding:"6px 14px", borderRadius:50, border:"1px solid rgba(255,255,255,.3)", background:"transparent", color:"rgba(255,255,255,.7)", fontSize:10, cursor:"pointer", fontFamily:"Tajawal,sans-serif", marginLeft:6 }}>
           📋 الشروط
         </button>
-        <button onClick={() => { setAuth(false); setScreen("client-home") }}
-          style={{ padding:"6px 14px", borderRadius:50, border:"1px solid rgba(255,255,255,.3)", background:"transparent", color:"rgba(255,255,255,.8)", fontSize:11, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
-          خروج
-        </button>
+        <div style={{ display:"flex", gap:6 }}>
+          <button onClick={() => setScreen("client-home")}
+            style={{ padding:"6px 12px", borderRadius:50, border:"1px solid rgba(255,255,255,.2)", background:"transparent", color:"rgba(255,255,255,.7)", fontSize:11, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+            🏠 الرئيسية
+          </button>
+          <button onClick={() => { setAuth(false); setScreen("client-home") }}
+            style={{ padding:"6px 12px", borderRadius:50, border:"1px solid rgba(255,255,255,.3)", background:"transparent", color:"rgba(255,255,255,.8)", fontSize:11, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+            خروج
+          </button>
+        </div>
       </div>
       <div style={{ display:"flex", background:T.white, borderBottom:`1px solid ${T.creamDk}` }}>
         {ADMIN_TABS.map(t => (
