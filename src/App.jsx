@@ -1193,6 +1193,98 @@ function ClientLogin({ setScreen }) {
   )
 }
 
+
+/* ══════════════════════════════════════════
+   📋 TERMS PAGE
+══════════════════════════════════════════ */
+function TermsPage({ setScreen }) {
+  const [tab, setTab] = useState("salon-platform")
+  
+  const salonPlatformTerms = [
+    { t:"١. رسوم التأسيس", b:"تُدفع رسوم تأسيس مرة واحدة عند الانضمام للمنصة وإعداد الحساب." },
+    { t:"٢. رسوم الاشتراك", b:"تُدفع رسوم الاشتراك الشهرية أو السنوية حسب الباقة المختارة. الاشتراك السنوي يوفر شهراً مجانياً (11 شهراً فقط)." },
+    { t:"٣. التجربة المجانية", b:"تُمنح تجربة مجانية لمدة 14 يوماً للصالون الجديد مرة واحدة فقط لكل صالون (يُتحقق بالإيميل ورقم الجوال)." },
+    { t:"٤. عمولة المنصة", b:"تأخذ المنصة عمولة 5% من قيمة كل خدمة مُنجزة. تُخصم من العربون المدفوع من العميلة. مثال: خدمة 200 ر.س → عربون 60 ر.س → عمولة المنصة 10 ر.س → يُحوَّل للصالون 50 ر.س." },
+    { t:"٥. موعد التحويل", b:"يُحوَّل نصيب الصالون من العربون خلال 24-48 ساعة من تأكيد الحجز." },
+    { t:"٦. سياسة ترقية الباقة", b:"يمكن الترقية لباقة أعلى في أي وقت بدفع الفرق بين الباقتين + رسوم ترقية 100 ر.س. يتم التفعيل فور إتمام الدفع." },
+    { t:"٧. سياسة تخفيض الباقة", b:"لا يمكن تخفيض الباقة إلا بعد انتهاء فترة الاشتراك الحالية. يُطبَّق التخفيض تلقائياً عند التجديد." },
+    { t:"٨. إدارة الحجوزات", b:"الصالون مسؤول عن تحديث حالة الحجوزات (مكتمل/ملغي) في الوقت المناسب. التأخر يؤثر على موعد التحويل." },
+    { t:"٩. المحتوى والسلوك", b:"يلتزم الصالون بعدم نشر محتوى مضلل أو مخالف للأنظمة. المنصة تحتفظ بحق إيقاف الحساب المخالف." },
+    { t:"١٠. إيقاف الخدمة", b:"للمنصة الحق في إيقاف حساب أي صالون يخالف الشروط أو يتلقى تقييمات سلبية متكررة بعد إشعار مسبق." },
+    { t:"١١. التعديلات", b:"تحتفظ المنصة بحق تعديل الأسعار والشروط مع إشعار مسبق بـ 30 يوماً." },
+  ]
+
+  const salonClientTerms = [
+    { t:"١. توزيع العربون", b:"العربون المدفوع من العميلة (30% من قيمة الخدمة): 5% عمولة للمنصة، والباقي (25%) يُحوَّل للصالون خلال 24-48 ساعة." },
+    { t:"٢. التزامات الصالون", b:"يلتزم الصالون بتقديم الخدمة في الوقت المحدد وبالجودة الموعودة وبالسعر المعلن على المنصة." },
+    { t:"٣. الإلغاء من الصالون", b:"إذا ألغى الصالون الموعد، يُرد العربون كاملاً للعميلة فوراً بما فيه عمولة المنصة." },
+    { t:"٤. الشفافية في التسعير", b:"يُحظر على الصالون تغيير الأسعار بعد الحجز أو إضافة رسوم غير معلنة." },
+    { t:"٥. العروض والباقات", b:"العروض والباقات المعلنة ملزمة للصالون طوال فترة صلاحيتها." },
+    { t:"٦. حل النزاعات", b:"في حال النزاع بين العميلة والصالون، تتدخل المنصة للوساطة. قرار المنصة ملزم للطرفين." },
+  ]
+
+  return (
+    <div style={{ background:T.cream, minHeight:"100vh", paddingBottom:40 }}>
+      <div style={{ background:`linear-gradient(135deg,#2C1810,#5A3020)`, padding:"40px 20px 24px", textAlign:"center" }}>
+        <div style={{ fontSize:36, marginBottom:8 }}>📋</div>
+        <h1 style={{ fontSize:20, fontWeight:900, color:T.white, marginBottom:4 }}>الشروط والأحكام</h1>
+        <p style={{ fontSize:12, color:"rgba(255,255,255,.6)" }}>آخر تحديث: يونيو 2025</p>
+      </div>
+
+      {/* تبويبات */}
+      <div style={{ display:"flex", background:T.white, borderBottom:`1px solid ${T.creamDk}` }}>
+        {[
+          { id:"salon-platform", label:"المنصة والصالون" },
+          { id:"salon-client",   label:"الصالون والعميلة" },
+        ].map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            style={{ flex:1, padding:"13px 8px", border:"none", borderBottom:`3px solid ${tab===t.id ? T.roseDp : "transparent"}`, background:"transparent", cursor:"pointer", fontSize:12, fontWeight:tab===t.id ? 700 : 400, color:tab===t.id ? T.roseDp : T.inkSoft, fontFamily:"Tajawal,sans-serif" }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ padding:"20px 18px" }}>
+        {/* بطاقة ملخص العمولة */}
+        {tab === "salon-platform" && (
+          <div style={{ background:`linear-gradient(135deg,${T.goldPale},#FFFBF0)`, borderRadius:14, padding:"16px", marginBottom:20, border:`1px solid ${T.goldL}` }}>
+            <div style={{ fontSize:13, fontWeight:800, color:T.ink, marginBottom:10 }}>💰 مثال توضيحي — خدمة بـ 200 ر.س</div>
+            <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+              {[
+                ["العربون (30%)", "60 ر.س", T.ink],
+                ["عمولة المنصة (5% من الخدمة)", "10 ر.س", T.red],
+                ["يُحوَّل للصالون", "50 ر.س", T.green],
+                ["الباقي يُدفع للصالون عند الخدمة", "140 ر.س", T.roseDp],
+              ].map(r => (
+                <div key={r[0]} style={{ display:"flex", justifyContent:"space-between", fontSize:12 }}>
+                  <span style={{ color:T.inkSoft }}>{r[0]}</span>
+                  <span style={{ fontWeight:700, color:r[2] }}>{r[1]}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {(tab === "salon-platform" ? salonPlatformTerms : salonClientTerms).map(s => (
+          <div key={s.t} style={{ marginBottom:16, background:T.white, borderRadius:12, padding:"14px 16px" }}>
+            <div style={{ fontSize:14, fontWeight:800, color:T.ink, marginBottom:6 }}>{s.t}</div>
+            <div style={{ fontSize:13, color:T.inkSoft, lineHeight:1.8 }}>{s.b}</div>
+          </div>
+        ))}
+
+        <div style={{ textAlign:"center", marginTop:20, fontSize:12, color:T.inkSoft }}>
+          للاستفسار: 0552401658 | beauty.techn5@gmail.com
+        </div>
+
+        <button onClick={() => setScreen("client-home")}
+          style={{ marginTop:16, width:"100%", padding:"12px", borderRadius:12, border:`1px solid ${T.creamDk}`, background:T.white, color:T.inkSoft, fontSize:13, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+          ← العودة للرئيسية
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /* ══════════════════════════════════════════
    🏪 OWNER REGISTER
 ══════════════════════════════════════════ */
@@ -3663,7 +3755,7 @@ function FAQPage({ setScreen }) {
     { cat:"للصالونات", items:[
       { q:"كم تبلغ رسوم التأسيس؟", a:"رسوم التأسيس 600 ريال تُدفع مرة واحدة فقط عند الاشتراك، وهي تشمل إعداد حسابك وربط جميع الأنظمة." },
       { q:"هل يوجد تجربة مجانية؟", a:"نعم! كل صالون يحصل على 14 يوم تجربة مجانية كاملة تشمل جميع مميزات باقة التوسع، بدون أي رسوم." },
-      { q:"كيف أستلم مبالغ العربون؟", a:"تحصلين على 98% من العربون (نحن نأخذ 2% فقط كعمولة). تُحوَّل المبالغ لحسابك البنكي خلال 48 ساعة." },
+      { q:"كيف أستلم مبالغ العربون؟", a:"تحصلين على 25% من قيمة الخدمة (نأخذ 5% عمولة من العربون). تُحوَّل المبالغ لحسابك البنكي خلال 24-48 ساعة." },
       { q:"هل أحتاج واتساب بزنس؟", a:"نعم، ننصح بتفعيل WhatsApp Business على رقم الصالون ليعمل البوت التلقائي للتأكيدات والتذكيرات." },
     ]},
   ]
@@ -4317,6 +4409,10 @@ function AdminDashboard({ setScreen }) {
             <div style={{ fontSize:10, color:"rgba(255,255,255,.5)" }}>BeautyTech Admin</div>
           </div>
         </div>
+        <button onClick={() => setScreen("terms-page")}
+          style={{ padding:"6px 14px", borderRadius:50, border:"1px solid rgba(255,255,255,.3)", background:"transparent", color:"rgba(255,255,255,.7)", fontSize:10, cursor:"pointer", fontFamily:"Tajawal,sans-serif", marginLeft:6 }}>
+          📋 الشروط
+        </button>
         <button onClick={() => { setAuth(false); setScreen("client-home") }}
           style={{ padding:"6px 14px", borderRadius:50, border:"1px solid rgba(255,255,255,.3)", background:"transparent", color:"rgba(255,255,255,.8)", fontSize:11, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
           خروج
@@ -4704,6 +4800,7 @@ export default function App() {
                   { label:"تواصل معنا", screen:"contact", icon:"💬" },
                   { label:"الأسئلة الشائعة", screen:"faq", icon:"❓" },
                   { label:"سياسة الخصوصية", screen:"privacy", icon:"🔒" },
+                  { label:"الشروط والأحكام", screen:"terms-page", icon:"📋" },
                 ].map(l => (
                   <button key={l.label} onClick={() => go(l.screen)}
                     style={{ padding:"10px 12px", borderRadius:10, border:`1px solid ${T.creamDk}`, background:T.cream, color:T.inkSoft, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"Tajawal,sans-serif", display:"flex", alignItems:"center", gap:6 }}>
