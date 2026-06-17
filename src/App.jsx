@@ -1598,7 +1598,7 @@ function OwnerDashboard({ setScreen }) {
     })
   }, [])
 
-  const OWN_TABS = ALL_OWN_TABS.filter(t => getPkgTabs(salonInfo.package || "basic").includes(t.id))
+  const OWN_TABS = ALL_OWN_TABS.filter(t => (PKGS.find(p => p.id === (salonInfo.package || "basic"))?.tabs || PKGS[0].tabs).includes(t.id))
   const daysLeft = salonInfo.trial_end
     ? Math.max(0, Math.ceil((new Date(salonInfo.trial_end) - new Date()) / (1000*60*60*24)))
     : 14
