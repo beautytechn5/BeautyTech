@@ -1899,9 +1899,6 @@ function OwnerDashboard({ setScreen }) {
         {tab === "calendar"  && <OwnerCalendar toast={toast} />}
         {tab === "staff"     && <OwnerStaff toast={toast} />}
         {tab === "broadcast" && <OwnerBroadcast toast={toast} />}
-        {tab === "calendar"  && <OwnerCalendar toast={toast} />}
-        {tab === "staff"     && <OwnerStaff toast={toast} />}
-        {tab === "broadcast" && <OwnerBroadcast toast={toast} />}
         {tab === "coupons"   && <OwnerCoupons toast={toast} />}
         {tab === "reports"   && (
           (salonInfo.package === "pro" || salonInfo.package === "elite")
