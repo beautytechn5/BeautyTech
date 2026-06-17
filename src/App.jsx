@@ -1839,10 +1839,16 @@ function OwnerDashboard({ setScreen }) {
             <div style={{ fontSize:11, color:T.roseDp, fontWeight:700 }}>🎁 تجربة مجانية — باقي {daysLeft} يوم</div>
           </div>
         </div>
-        <button onClick={() => { toast("👋 تم تسجيل الخروج"); setScreen("owner-login") }}
-          style={{ padding:"7px 14px", borderRadius:50, border:`1px solid ${T.roseL}`, background:T.white, color:T.inkSoft, fontSize:12, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
-          خروج
-        </button>
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={() => setScreen("client-home")}
+            style={{ padding:"7px 14px", borderRadius:50, border:`1px solid ${T.roseL}`, background:T.roseL, color:T.roseDp, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+            🏠 الرئيسية
+          </button>
+          <button onClick={() => { toast("👋 تم تسجيل الخروج"); setScreen("owner-login") }}
+            style={{ padding:"7px 14px", borderRadius:50, border:`1px solid ${T.roseL}`, background:T.white, color:T.inkSoft, fontSize:12, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+            خروج
+          </button>
+        </div>
       </div>
 
       {/* Salon quick info */}
@@ -4496,9 +4502,9 @@ function OwnerTerms() {
     <div>
       {/* بطاقة التسوية المالية */}
       <div style={{ background:`linear-gradient(135deg,#1B5E20,#2E7D32)`, borderRadius:14, padding:"14px 16px", marginBottom:12 }}>
-        <div style={{ fontSize:13, fontWeight:800, color:T.white, marginBottom:8 }}>📅 التسوية المالية الأسبوعية</div>
+        <div style={{ fontSize:13, fontWeight:800, color:T.white, marginBottom:8 }}>📅 التسوية المالية</div>
         <div style={{ fontSize:12, color:"rgba(255,255,255,.85)", lineHeight:1.9 }}>
-          • يوم التسوية: <strong style={{ color:T.white }}>كل يوم سبت</strong><br/>
+          • موعد التحويل: <strong style={{ color:T.white }}>خلال 24-48 ساعة</strong> من تأكيد الحجز<br/>
           • العمولة: <strong style={{ color:T.white }}>5% من قيمة الخدمة</strong> تُخصم من العربون<br/>
           • التحويل: لرقم الآيبان المسجّل في الإعدادات<br/>
           • تابع مستحقاتك من تبويب <strong style={{ color:T.white }}>💰 المالية</strong>
@@ -5762,7 +5768,7 @@ function AdminSettlement() {
   return (
     <div>
       <div style={{ fontSize:16, fontWeight:800, color:T.ink, marginBottom:6 }}>💳 إدارة التسوية المالية</div>
-      <div style={{ fontSize:12, color:T.inkSoft, marginBottom:16 }}>يوم التسوية: كل يوم سبت</div>
+      <div style={{ fontSize:12, color:T.inkSoft, marginBottom:16 }}>موعد التحويل: خلال 24-48 ساعة من تأكيد الحجز</div>
 
       {/* فلاتر يومية */}
       <div style={{ display:"flex", gap:6, marginBottom:12 }}>
