@@ -1074,7 +1074,7 @@ function BookingPage({ salon, setScreen }) {
   const [termsOpen, setTermsOpen] = useState(false)
   const deposit = svc ? Math.round(svc.p * 0.3) : 0
   const platformFee = svc ? Math.round(svc.p * 0.05) : 0
-  const salonAmount = deposit - platformFee
+  const salonAmount = deposit - platformFee  // العربون - عمولة المنصة
   const ALL_SVC_TIMES = ["00:00","00:30","01:00","01:30","02:00","02:30","03:00","03:30","04:00","04:30","05:00","05:30","06:00","06:30","07:00","07:30","08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00","21:30","22:00","22:30","23:00","23:30"]
   const getSvcTimes = () => {
     if (!svc || !svc.timeFrom || !svc.timeTo) return ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30"]
@@ -1749,7 +1749,7 @@ function OwnerLogin({ setScreen }) {
 /* ══════════════════════════════════════════
    📊 OWNER DASHBOARD
 ══════════════════════════════════════════ */
-const OWN_TABS = [
+const ALL_OWN_TABS = [
   { id:"overview",  icon:"📊", label:"نظرة عامة" },
   { id:"bookings",  icon:"📅", label:"الحجوزات" },
   { id:"services",  icon:"✂️",  label:"الخدمات" },
@@ -1764,17 +1764,18 @@ const OWN_TABS = [
 function OwnerDashboard({ setScreen }) {
   const toast = useToast()
   const [tab, setTab] = useState("overview")
-  const [salonInfo, setSalonInfo] = useState({ name:"...", trial_end:null })
+  const [salonInfo, setSalonInfo] = useState({ name:"...", trial_end:null, package:"basic" })
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) return
-      supabase.from('salons').select('name,trial_end,city,owner_name,phone,bio,email').eq('email', session.user.email).then(({ data }) => {
+      supabase.from('salons').select('name,trial_end,city,owner_name,phone,bio,email,package').eq('email', session.user.email).then(({ data }) => {
         if (data && data[0]) setSalonInfo(data[0])
       })
     })
   }, [])
 
+  const OWN_TABS = ALL_OWN_TABS.filter(t => getPkgTabs(salonInfo.package || "basic").includes(t.id))
   const daysLeft = salonInfo.trial_end
     ? Math.max(0, Math.ceil((new Date(salonInfo.trial_end) - new Date()) / (1000*60*60*24)))
     : 14
@@ -3276,11 +3277,33 @@ function OwnerPackage({ toast }) {
   }, [])
 
   const changePkg = async (newPkg) => {
+    if (newPkg === currentPkg) return
+    const pkgOrder = { basic:1, pro:2, elite:3 }
+    const isUpgrade = pkgOrder[newPkg] > pkgOrder[currentPkg]
+    
+    if (!isUpgrade) {
+      toast("⚠ لتخفيض الباقة انتظري انتهاء اشتراكك الحالي — سيتم التخفيض تلقائياً عند التجديد")
+      return
+    }
+    
+    // ترقية — يدفع الفرق + 200 رسوم ترقية
+    const diff = (PKGS.find(p => p.id === newPkg)?.price || 0) - (PKGS.find(p => p.id === currentPkg)?.price || 0)
+    const upgradeFee = diff + 200
+    
+    const confirm = window.confirm(`ترقية من ${PKGS.find(p=>p.id===currentPkg)?.name} إلى ${PKGS.find(p=>p.id===newPkg)?.name}
+
+رسوم الترقية: ${upgradeFee} ر.س (الفرق ${diff} ر.س + رسوم ترقية 200 ر.س)
+
+للدفع تواصلي معنا: 0552401658
+
+هل تريدين المتابعة؟`)
+    if (!confirm) return
+    
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
     await supabase.from('salons').update({ package: newPkg }).eq('email', session.user.email)
     setCurrentPkg(newPkg)
-    toast("✅ تم تغيير الباقة — سيتم التفعيل بعد الدفع")
+    toast("✅ تم طلب الترقية — سيتواصل معك فريقنا لإتمام الدفع")
   }
 
   return (
@@ -4701,9 +4724,9 @@ function Navbar({ screen, setScreen }) {
             )}
             {role === "client" && (
               <>
-                <button onClick={() => setScreen("gift-booking")}
+                <button onClick={() => setScreen("gift")}
                   style={{ padding:"7px 12px", borderRadius:50, border:"none", background:T.roseL, color:T.roseDp, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
-                  🎁 إهداء
+                  🎁 قسيمة هدية
                 </button>
                 <button onClick={() => setScreen("my-bookings")}
                   style={{ padding:"7px 12px", borderRadius:50, border:`1.5px solid ${T.roseL}`, background:T.white, color:T.roseDp, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
@@ -4722,9 +4745,9 @@ function Navbar({ screen, setScreen }) {
           </>
         ) : (
           <>
-            <button onClick={() => setScreen("gift-booking")}
+            <button onClick={() => setScreen("gift")}
               style={{ padding:"7px 12px", borderRadius:50, border:`1.5px solid ${T.roseL}`, background:T.roseL, color:T.roseDp, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
-              🎁 إهداء
+              🎁 قسيمة هدية
             </button>
             <span onClick={() => setScreen("client-login")} style={{ fontSize:12, fontWeight:600, color:T.inkSoft, cursor:"pointer", padding:"6px 4px" }}>دخول</span>
             <span onClick={() => setScreen("client-register")} style={{ fontSize:12, fontWeight:600, color:T.inkSoft, cursor:"pointer", padding:"6px 4px" }}>تسجيل</span>
