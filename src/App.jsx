@@ -167,6 +167,7 @@ function getServiceEmoji(name) {
 function SkeletonCard() {
   return (
     <div style={{ background:T.white, borderRadius:16, overflow:"hidden", marginBottom:14 }}>
+      <style>{`@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
       <div style={{ height:90, background:`linear-gradient(90deg,${T.creamDk} 25%,${T.cream} 50%,${T.creamDk} 75%)`, backgroundSize:"200% 100%", animation:"shimmer 1.5s infinite" }} />
       <div style={{ padding:14 }}>
         <div style={{ height:16, width:"60%", background:T.creamDk, borderRadius:8, marginBottom:8 }} />
@@ -1598,7 +1599,7 @@ function OwnerDashboard({ setScreen }) {
     })
   }, [])
 
-  const OWN_TABS = ALL_OWN_TABS.filter(t => (PKGS.find(p => p.id === (salonInfo.package || "basic"))?.tabs || PKGS[0].tabs).includes(t.id))
+  const OWN_TABS = ALL_OWN_TABS
   const daysLeft = salonInfo.trial_end
     ? Math.max(0, Math.ceil((new Date(salonInfo.trial_end) - new Date()) / (1000*60*60*24)))
     : 14
@@ -4624,11 +4625,6 @@ function Navbar({ screen, setScreen }) {
 /* ══════════════════════════════════════════
    🚀 APP
 ══════════════════════════════════════════ */
-// Shimmer animation
-const shimmerStyle = document.createElement('style')
-shimmerStyle.textContent = '@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }'
-document.head.appendChild(shimmerStyle)
-
 export default function App() {
   const [splash, setSplash] = useState(true)
   const [screen, setScreen] = useState("client-home")
