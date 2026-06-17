@@ -1833,6 +1833,7 @@ const ALL_OWN_TABS = [
   { id:"overview",  icon:"📊", label:"نظرة عامة" },
   { id:"bookings",  icon:"📅", label:"الحجوزات" },
   { id:"calendar",  icon:"🗓️", label:"المواعيد" },
+  { id:"love_gifts",icon:"💝", label:"إهداء محبة" },
   { id:"services",  icon:"✂️",  label:"الخدمات" },
   { id:"staff",     icon:"👩💼", label:"الموظفات" },
   { id:"offers",    icon:"🏷️",  label:"عروض" },
@@ -1939,6 +1940,7 @@ function OwnerDashboard({ setScreen }) {
         {tab === "staff"     && <OwnerStaff toast={toast} />}
         {tab === "broadcast" && <OwnerBroadcast toast={toast} />}
         {tab === "coupons"   && <OwnerCoupons toast={toast} />}
+        {tab === "love_gifts" && <OwnerLoveGifts toast={toast} />}
         {tab === "reports"   && (
           (salonInfo.package === "pro" || salonInfo.package === "elite")
             ? <OwnerReport salonInfo={salonInfo} />
@@ -1987,6 +1989,7 @@ function OwnerBookings() {
       const { data } = await supabase.from('bookings')
         .select('*')
         .eq('salon_id', sid)
+        .neq('booking_type', 'love_gift')
         .order('appointment_date', { ascending: true })
       setBookings(data || [])
       setLoading(false)
@@ -4653,7 +4656,111 @@ function OwnerFinance({ toast }) {
     </div>
   )
 }
+function OwnerLoveGifts({ toast }) {
+  const [gifts, setGifts] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState("")
 
+  useEffect(() => {
+    const load = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { setLoading(false); return }
+      const { data: salon } = await supabase.from('salons').select('id').eq('email', session.user.email)
+      if (!salon || !salon[0]) { setLoading(false); return }
+      const { data } = await supabase.from('bookings')
+        .select('*')
+        .eq('salon_id', salon[0].id)
+        .eq('booking_type', 'love_gift')
+        .order('created_at', { ascending: false })
+      setGifts(data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const filtered = gifts.filter(g => {
+    if (!search) return true
+    const s = search.trim()
+    return (g.client_name||"").includes(s) || (g.client_phone||"").includes(s)
+  })
+
+  const totalGross = filtered.reduce((s,g) => s + (g.total_amount||0), 0)
+  const totalFee   = filtered.reduce((s,g) => s + (g.platform_fee||0), 0)
+  const totalNet   = filtered.reduce((s,g) => s + (g.salon_amount||0), 0)
+
+  const markUsed = async (id) => {
+    await supabase.from('bookings').update({ status:'completed' }).eq('id', id)
+    setGifts(g => g.map(x => x.id === id ? { ...x, status:'completed' } : x))
+    toast("✅ تم تحديد الإهداء كمستخدَم")
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize:16, fontWeight:800, color:T.ink, marginBottom:4 }}>💝 حجوزات إهداء المحبة</div>
+      <div style={{ fontSize:11, color:T.inkSoft, marginBottom:16 }}>المبلغ المسجَّل هنا قيمة الخدمة كاملة وليس عربوناً — لأنها مدفوعة بالكامل من المُهدية</div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:16 }}>
+        <div style={{ background:T.white, borderRadius:12, padding:"12px", textAlign:"center", border:`1px solid ${T.creamDk}` }}>
+          <div style={{ fontSize:16, fontWeight:900, color:T.ink }}>{totalGross.toLocaleString()}</div>
+          <div style={{ fontSize:9, color:T.inkSoft, marginTop:3 }}>إجمالي مبلغ الإهداء</div>
+        </div>
+        <div style={{ background:T.white, borderRadius:12, padding:"12px", textAlign:"center", border:`1px solid ${T.creamDk}` }}>
+          <div style={{ fontSize:16, fontWeight:900, color:"#C62828" }}>{totalFee.toLocaleString()}</div>
+          <div style={{ fontSize:9, color:T.inkSoft, marginTop:3 }}>عمولة المنصة</div>
+        </div>
+        <div style={{ background:`linear-gradient(135deg,#2E7D32,#1B5E20)`, borderRadius:12, padding:"12px", textAlign:"center" }}>
+          <div style={{ fontSize:16, fontWeight:900, color:T.white }}>{totalNet.toLocaleString()}</div>
+          <div style={{ fontSize:9, color:"rgba(255,255,255,.8)", marginTop:3 }}>صافي مستحقاتك</div>
+        </div>
+      </div>
+
+      <input value={search} onChange={e => setSearch(e.target.value)}
+        placeholder="بحث بالاسم أو رقم الجوال..."
+        style={{ width:"100%", padding:"10px 14px", border:`1.5px solid ${T.creamDk}`, borderRadius:12, fontSize:13, fontFamily:"Tajawal,sans-serif", background:T.white, outline:"none", marginBottom:14 }} />
+
+      {loading && <div style={{ textAlign:"center", padding:30, color:T.inkSoft }}>...جاري التحميل</div>}
+      {!loading && filtered.length === 0 && <Empty icon="💝" title="لا توجد إهداءات بعد" desc="ستظهر هنا فور استلام أي إهداء محبة" />}
+
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        {filtered.map(g => (
+          <Card key={g.id} style={{ padding:16, border:`1.5px solid ${g.status==="completed" ? T.creamDk : T.roseL}` }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
+              <div>
+                <div style={{ fontSize:14, fontWeight:800, color:T.ink }}>{g.client_name}</div>
+                <div style={{ fontSize:12, color:T.inkSoft }}>📞 {g.client_phone}</div>
+              </div>
+              <span style={{ background:g.status==="completed" ? T.creamDk : T.roseL, color:g.status==="completed" ? T.inkSoft : T.roseDp, fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20 }}>
+                {g.status === "completed" ? "✅ تم الاستخدام" : "⏳ بانتظار الزيارة"}
+              </span>
+            </div>
+            {g.service_name && <div style={{ fontSize:12, color:T.roseDp, marginBottom:8 }}>✂️ {g.service_name}</div>}
+            <div style={{ fontSize:11, color:T.inkMuted, marginBottom:8 }}>
+              🕐 تاريخ الإهداء: {g.created_at ? new Date(g.created_at).toLocaleDateString('ar-SA') : "—"}
+            </div>
+            <div style={{ background:T.cream, borderRadius:10, padding:"10px 12px", marginBottom:10 }}>
+              {[
+                ["💝 مبلغ إهداء المحبة (كامل)", (g.total_amount||0) + " ر.س", T.ink],
+                ["عمولة المنصة (5%)", (g.platform_fee||0) + " ر.س", "#C62828"],
+                ["صافي ما يتحول لك", (g.salon_amount||0) + " ر.س", T.green],
+              ].map(r => (
+                <div key={r[0]} style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"3px 0", borderBottom:`1px solid ${T.creamDk}` }}>
+                  <span style={{ color:T.inkSoft }}>{r[0]}</span>
+                  <span style={{ fontWeight:700, color:r[2] }}>{r[1]}</span>
+                </div>
+              ))}
+            </div>
+            {g.status !== "completed" && (
+              <button onClick={() => markUsed(g.id)}
+                style={{ width:"100%", padding:"9px", borderRadius:10, border:"none", background:T.green, color:T.white, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                ✅ تحديد كمستخدَم (زارت الصالون)
+              </button>
+            )}
+          </Card>
+        ))}
+      </div>
+    </div>
+  )
+}
 function OwnerTerms() {
   const [tab, setTab] = useState("platform")
 
@@ -5564,6 +5671,7 @@ function GiftPage({ setScreen }) {
     const recWaNum = recipientPhone.replace(/^0/, "").replace(/[^0-9]/g, "")
     const recMsg = "💝 لديكِ إهداء محبة من " + senderName + "!\n\n" +
       "الصالون: " + selectedSalon.name + " — " + selectedSalon.city + "\n" +
+      (selectedSalon.mapUrl ? ("📍 الموقع: " + selectedSalon.mapUrl + "\n") : "") +
       "الخدمات: " + servicesText + "\n" +
       "القيمة: " + totalAmount + " ر.س (مدفوعة بالكامل)\n" +
       (msg ? ("\n" + msg + "\n") : "") +
