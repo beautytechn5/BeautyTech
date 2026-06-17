@@ -6775,7 +6775,7 @@ function Navbar({ screen, setScreen }) {
               <>
                 <button onClick={() => setScreen("gift")}
                   style={{ padding:"7px 12px", borderRadius:50, border:"none", background:T.roseL, color:T.roseDp, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
-                  🎁 قسيمة هدية
+                  💝 إهداء محبة
                 </button>
                 <button onClick={() => setScreen("my-bookings")}
                   style={{ padding:"7px 12px", borderRadius:50, border:`1.5px solid ${T.roseL}`, background:T.white, color:T.roseDp, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
@@ -6897,7 +6897,7 @@ export default function App() {
                 {[
                   { label:"حجوزاتي", screen:"my-bookings", icon:"📅" },
                   { label:"عن المنصة", screen:"about", icon:"🌸" },
-                  { label:"قسيمة هدية", screen:"gift", icon:"🎁" },
+                  { label:"إهداء محبة", screen:"gift", icon:"💝" },
                   { label:"تواصل معنا", screen:"contact", icon:"💬" },
                   { label:"الأسئلة الشائعة", screen:"faq", icon:"❓" },
                   { label:"سياسة الخصوصية", screen:"privacy", icon:"🔒" },
