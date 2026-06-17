@@ -3473,13 +3473,15 @@ function OwnerCalendar({ toast }) {
   const [loading, setLoading] = useState(true)
   const [weekStart, setWeekStart] = useState(() => {
     const d = new Date()
-    d.setDate(d.getDate() - d.getDay() + 6) // السبت
+    const diffToSaturday = (d.getDay() + 1) % 7
+    d.setDate(d.getDate() - diffToSaturday) // أقرب سبت سابق أو اليوم نفسه
+    d.setHours(0, 0, 0, 0)
     return d
   })
 
   const days = Array.from({length:7}, (_,i) => {
     const d = new Date(weekStart)
-    d.setDate(weekStart.getDate() - 6 + i)
+    d.setDate(weekStart.getDate() + i)
     return d
   })
 
