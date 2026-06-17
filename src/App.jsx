@@ -163,8 +163,27 @@ function getServiceEmoji(name) {
   return "💅"
 }
 
+
+function SkeletonCard() {
+  return (
+    <div style={{ background:T.white, borderRadius:16, overflow:"hidden", marginBottom:14 }}>
+      <div style={{ height:90, background:`linear-gradient(90deg,${T.creamDk} 25%,${T.cream} 50%,${T.creamDk} 75%)`, backgroundSize:"200% 100%", animation:"shimmer 1.5s infinite" }} />
+      <div style={{ padding:14 }}>
+        <div style={{ height:16, width:"60%", background:T.creamDk, borderRadius:8, marginBottom:8 }} />
+        <div style={{ height:12, width:"40%", background:T.cream, borderRadius:8, marginBottom:12 }} />
+        <div style={{ height:36, background:T.creamDk, borderRadius:10 }} />
+      </div>
+    </div>
+  )
+}
+
+function SkeletonList({ count=3 }) {
+  return <>{Array(count).fill(0).map((_, i) => <SkeletonCard key={i} />)}</>
+}
+
 function useSalons() {
   const [data, setData] = useState([])
+  const [loading, setLoading] = useState(true)
   useEffect(() => {
     const load = async () => {
       const { data: rows } = await supabase.from('salons').select('*')
@@ -172,6 +191,7 @@ function useSalons() {
       // جلب الخدمات لكل صالون
       const { data: allServices } = await supabase.from('services').select('*').eq('active', true)
       const { data: allOffers } = await supabase.from('offers').select('salon_id').eq('active', true)
+      setLoading(false)
       setData(rows.map(s => ({
         id: s.id,
         name: s.name || "",
@@ -384,7 +404,7 @@ function HomeOffersSection({ setScreen, setSalon, salons }) {
 }
 
 function ClientHome({ setScreen, setSalon }) {
-  const salons = useSalons()
+  const { data: salons, loading: salonsLoading } = useSalons()
   const [filterType, setFilterType] = useState("")
   const [q, setQ]           = useState("")
   const [fq, setFq]         = useState(false)
@@ -1089,14 +1109,29 @@ function BookingPage({ salon, setScreen }) {
     if (error) { toast("⚠ حدث خطأ: " + error.message); return }
     // إشعار واتساب للصالون
     if (salon?.wa) {
-      const msg = encodeURIComponent(`🌸 حجز جديد!
-العميلة: ${name}
-الجوال: ${phone}
-الخدمة: ${svc?.n || ""}
-التاريخ: ${date}
-الوقت: ${time}
-المبلغ: ${svc?.p || 0} ر.س`)
-      window.open(`https://wa.me/966${(salon.wa).replace(/^0/, "")}?text=${msg}`, "_blank")
+      const waNum = (salon.wa).replace(/^0/, "").replace(/[^0-9]/g,"")
+      const msg = encodeURIComponent(
+        `🌸 *حجز جديد على بيوتي تيك!*
+
+` +
+        `👤 العميلة: ${name}
+` +
+        `📞 الجوال: ${phone}
+` +
+        `✂️ الخدمة: ${svc?.n || ""}
+` +
+        `📅 التاريخ: ${date}
+` +
+        `⏰ الوقت: ${time}
+` +
+        `💰 المبلغ: ${svc?.p || 0} ر.س
+` +
+        `🔒 العربون: ${deposit} ر.س
+
+` +
+        `للتأكيد أو الإلغاء: beauty-tech-henna.vercel.app`
+      )
+      setTimeout(() => window.open(`https://wa.me/966${waNum}?text=${msg}`, "_blank"), 1000)
     }
     toast("✅ تم الحجز! سيصلكِ تأكيد على واتساب")
     setTimeout(() => setScreen("client-home"), 1500)
@@ -4602,6 +4637,35 @@ function AdminDashboard({ setScreen }) {
 /* ══════════════════════════════════════════
    🧭 NAVBAR
 ══════════════════════════════════════════ */
+
+function BottomNav({ screen, setScreen, user }) {
+  const role = user?.user_metadata?.role
+  if (["owner-dashboard","admin","booking","owner-register","owner-login","client-register","client-login","payment","gift-booking"].includes(screen)) return null
+
+  const tabs = role === "owner" ? [
+    { id:"client-home", icon:"🏠", label:"الرئيسية" },
+    { id:"owner-dashboard", icon:"📊", label:"لوحتي" },
+  ] : [
+    { id:"client-home", icon:"🏠", label:"الرئيسية" },
+    { id:"gift-booking", icon:"🎁", label:"إهداء" },
+    { id:"my-bookings", icon:"📅", label:"حجوزاتي" },
+    { id:"profile", icon:"👤", label:"ملفي" },
+  ]
+
+  return (
+    <div style={{ position:"fixed", bottom:0, left:0, right:0, background:T.white, borderTop:`1px solid ${T.roseL}`, display:"flex", zIndex:600, paddingBottom:"env(safe-area-inset-bottom,0px)", boxShadow:"0 -4px 20px rgba(44,32,24,.08)" }}>
+      {tabs.map(t => (
+        <button key={t.id} onClick={() => setScreen(t.id)}
+          style={{ flex:1, padding:"10px 4px 8px", border:"none", background:"transparent", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:3, fontFamily:"Tajawal,sans-serif" }}>
+          <span style={{ fontSize:20 }}>{t.icon}</span>
+          <span style={{ fontSize:10, fontWeight: screen===t.id ? 700 : 400, color: screen===t.id ? T.roseDp : T.inkSoft }}>{t.label}</span>
+          {screen===t.id && <div style={{ width:4, height:4, borderRadius:"50%", background:T.roseDp }} />}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function Navbar({ screen, setScreen }) {
   const [user, setUser] = useState(null)
   useEffect(() => {
@@ -4684,6 +4748,11 @@ function Navbar({ screen, setScreen }) {
 /* ══════════════════════════════════════════
    🚀 APP
 ══════════════════════════════════════════ */
+// Shimmer animation
+const shimmerStyle = document.createElement('style')
+shimmerStyle.textContent = '@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }'
+document.head.appendChild(shimmerStyle)
+
 export default function App() {
   const [splash, setSplash] = useState(true)
   const [screen, setScreen] = useState("client-home")
