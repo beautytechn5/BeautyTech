@@ -5485,7 +5485,7 @@ function GiftPage_OLD_TO_DELETE({ setScreen }) {
 
 
 
-function GiftPage_OLD({ setScreen }) {
+function GiftPage({ setScreen }) {
   const toast = useToast()
   const salons = useSalons()
   const [step, setStep] = useState(1)
