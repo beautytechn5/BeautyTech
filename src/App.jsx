@@ -183,7 +183,6 @@ function SkeletonList({ count=3 }) {
 
 function useSalons() {
   const [data, setData] = useState([])
-  const [loading, setLoading] = useState(true)
   useEffect(() => {
     const load = async () => {
       const { data: rows } = await supabase.from('salons').select('*')
@@ -191,7 +190,6 @@ function useSalons() {
       // جلب الخدمات لكل صالون
       const { data: allServices } = await supabase.from('services').select('*').eq('active', true)
       const { data: allOffers } = await supabase.from('offers').select('salon_id').eq('active', true)
-      setLoading(false)
       setData(rows.map(s => ({
         id: s.id,
         name: s.name || "",
@@ -404,7 +402,8 @@ function HomeOffersSection({ setScreen, setSalon, salons }) {
 }
 
 function ClientHome({ setScreen, setSalon }) {
-  const { data: salons, loading: salonsLoading } = useSalons()
+  const salons = useSalons()
+  const salonsLoading = salons.length === 0
   const [filterType, setFilterType] = useState("")
   const [q, setQ]           = useState("")
   const [fq, setFq]         = useState(false)
