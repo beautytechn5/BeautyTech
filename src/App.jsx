@@ -3490,7 +3490,7 @@ function OwnerPackage({ toast, onPkgChange }) {
           <div style={{ fontSize:12, fontWeight:700, color:T.ink, marginBottom:6 }}>🏦 بيانات التحويل</div>
           <div style={{ fontSize:12, color:T.inkSoft, lineHeight:2 }}>
             <div>البنك: <strong style={{ color:T.ink }}>بنك الراجحي</strong></div>
-            <div>رقم الآيبان: <strong style={{ color:T.ink, fontSize:13 }}>SA0000000000000000000000</strong></div>
+            <div>رقم الآيبان: <strong style={{ color:T.ink, fontSize:13 }}>SA7080000584608016227161</strong></div>
             <div>اسم المستفيد: <strong style={{ color:T.ink }}>بيوتي تيك</strong></div>
           </div>
         </div>
@@ -5006,7 +5006,7 @@ function AboutPage({ setScreen }) {
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
             {[
               { n:"١٤ يوم", l:"تجربة مجانية" },
-              { n:"٢٪",    l:"عمولة فقط" },
+              { n:"١٠٪", l:"عمولة فقط" },
               { n:"٢٤/٧",  l:"دعم فني" },
               { n:"١٠٠٪",  l:"سعودي" },
             ].map(s => (
@@ -5064,7 +5064,7 @@ function ContactPage({ setScreen }) {
           ].map(it => (
             <a key={it.title} href={it.action} target="_blank" rel="noreferrer"
               style={{ background:T.white, borderRadius:14, padding:"14px 16px", display:"flex", alignItems:"center", gap:12, textDecoration:"none", border:`1px solid ${T.creamDk}`, transition:"all .2s" }}>
-              <div style={{ width:44, height:44, borderRadius:"50%", background:it.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, flexShrink:0 }}>{it.icon}</div>
+              <div style={{ width:44, height:44, borderRadius:"50%", background:it.color, display:"flex", alignItems:"center", justifyContent:"center" }}><SocialIcon type={it.icon} /></div>
               <div>
                 <div style={{ fontSize:14, fontWeight:800, color:T.ink }}>{it.title}</div>
                 <div style={{ fontSize:12, color:it.tcolor, fontWeight:600 }}>{it.desc}</div>
@@ -6808,6 +6808,7 @@ export default function App() {
     if (screen === "contact")         return <ContactPage    setScreen={go} />
     if (screen === "faq")             return <FAQPage        setScreen={go} />
     if (screen === "privacy")         return <PrivacyPage    setScreen={go} />
+  if (screen === "terms-page")      return <TermsPage      setScreen={go} />
     if (screen === "404")             return <NotFoundPage   setScreen={go} />
     if (screen === "gift")             return <GiftPage        setScreen={go} />
     if (screen === "my-bookings")      return <MyBookingsPage  setScreen={go} />
