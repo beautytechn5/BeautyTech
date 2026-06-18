@@ -143,6 +143,30 @@ function TermsModal({ open, onClose }) {
 const SALONS = []
 
 
+
+/* ══════════════════════════════════════════
+   💰 COMMISSION CALCULATOR — مركزي ودقيق
+   خدمة/باقة/كوبون/عرض: عمولة 10% من الخدمة، تُخصم من العربون 30%
+   إهداء محبة: عمولة 10% من المبلغ الكامل، للصالون 90%
+══════════════════════════════════════════ */
+function calcCommission(booking) {
+  const total = booking.total_amount || 0
+  const isLoveGift = booking.booking_type === "love_gift"
+
+  if (isLoveGift) {
+    // العميل دفع الكامل — عمولة 10% من الكامل
+    const fee = booking.platform_fee || Math.round(total * 0.10)
+    const salonGet = total - fee
+    return { fee, salonGet, label: "90% من المبلغ الكامل", depositPaid: total }
+  } else {
+    // عربون 30% — عمولة 10% من الخدمة الكاملة تُخصم منه
+    const deposit = booking.deposit_amount || Math.round(total * 0.30)
+    const fee = booking.platform_fee || Math.round(total * 0.10)
+    const salonGet = deposit - fee   // ما يحوّل للصالون من العربون
+    return { fee, salonGet, label: "العربون - العمولة", depositPaid: deposit }
+  }
+}
+
 function getServiceEmoji(name) {
   const n = (name || "").toLowerCase()
   if (n.includes("قص") || n.includes("تقصير")) return "✂️"
@@ -2009,17 +2033,21 @@ function OwnerBookings() {
                 📞 {bk.client_phone} · 📅 {bk.appointment_date} · ⏰ {bk.appointment_time}
               </div>
               <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, marginBottom:10 }}>
-                {bk.booking_type === "love_gift" ? (
-                  <>
-                    <span style={{ color:T.inkSoft }}>المبلغ الكامل: <span style={{ color:"#E91E63", fontWeight:700 }}>{bk.total_amount} ر.س</span></span>
-                    <span style={{ color:T.inkSoft }}>صافيك: <span style={{ color:T.green, fontWeight:700 }}>{(bk.total_amount||0) - (bk.platform_fee || Math.round((bk.total_amount||0)*0.10))} ر.س</span></span>
-                  </>
-                ) : (
-                  <>
-                    <span style={{ color:T.inkSoft }}>المبلغ: <span style={{ color:T.ink, fontWeight:700 }}>{bk.total_amount} ر.س</span></span>
-                    <span style={{ color:T.inkSoft }}>العربون: <span style={{ color:T.gold, fontWeight:700 }}>{bk.deposit_amount} ر.س</span></span>
-                  </>
-                )}
+                {(() => {
+                  const { fee, salonGet, depositPaid } = calcCommission(bk)
+                  const isLove = bk.booking_type === "love_gift"
+                  return isLove ? (
+                    <>
+                      <span style={{ color:T.inkSoft }}>المبلغ الكامل: <span style={{ color:"#E91E63", fontWeight:700 }}>{bk.total_amount} ر.س</span></span>
+                      <span style={{ color:T.inkSoft }}>صافيك (90%): <span style={{ color:T.green, fontWeight:700 }}>{salonGet} ر.س</span></span>
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ color:T.inkSoft }}>العربون: <span style={{ color:T.gold, fontWeight:700 }}>{depositPaid} ر.س</span></span>
+                      <span style={{ color:T.inkSoft }}>صافيك: <span style={{ color:T.green, fontWeight:700 }}>{salonGet} ر.س</span></span>
+                    </>
+                  )
+                })()}
               </div>
               {bk.status === "pending" && (
                 <div style={{ display:"flex", gap:8 }}>
@@ -4401,15 +4429,8 @@ function OwnerFinance({ toast }) {
   // حسابات دقيقة
   // العربون الحجوزات العادية = deposit_amount - platform_fee
   const calcNet = (b) => {
-    if (b.booking_type === "love_gift") {
-      // إهداء المحبة: المبلغ الكامل - 10% عمولة
-      const fee = b.platform_fee || Math.round((b.total_amount||0) * 0.10)
-      return (b.total_amount||0) - fee
-    } else {
-      // خدمة عادية: العربون - 10% عمولة
-      const fee = b.platform_fee || Math.round((b.total_amount||0) * 0.10)
-      return (b.deposit_amount||0) - fee
-    }
+    const { salonGet } = calcCommission(b)
+    return salonGet
   }
 
   const totalPending  = pending.reduce((s,b)  => s + calcNet(b), 0)
@@ -4450,7 +4471,7 @@ function OwnerFinance({ toast }) {
         <div style={{ fontSize:11, color:T.inkSoft, lineHeight:2 }}>
           • <strong>خدمة عادية:</strong> العربون (30%) − عمولة المنصة (10% من الخدمة)<br/>
           • <strong>إهداء المحبة:</strong> المبلغ الكامل − عمولة المنصة (10%)<br/>
-          • مثال خدمة 200 ر.س: عربون 60 ر.س − عمولة 20 ر.س = <strong style={{ color:T.green }}>40 ر.س لك</strong>
+          • مثال خدمة 200 ر.س: عربون 60 ر.س − عمولتي 20 ر.س = <strong style={{ color:T.green }}>40 ر.س تُحوَّل لك · والـ 140 ر.س تستلمها من العميلة مباشرة</strong>
         </div>
       </div>
 
@@ -5786,13 +5807,13 @@ function AdminCommissions() {
     setLoading(false)
   }
 
-  // العمولة = 10% من قيمة الخدمة لكل حجز (مكتمل أو معلق)
   const completedBks = bookings.filter(b => b.status === "completed")
-  const totalCommission = completedBks.reduce((s,b) => s + (b.platform_fee || Math.round((b.total_amount||0)*0.10)), 0)
-  const settledCommission = completedBks.filter(b => b.payment_status==="settled").reduce((s,b) => s + (b.platform_fee || Math.round((b.total_amount||0)*0.10)), 0)
-  const pendingCommission = completedBks.filter(b => b.payment_status!=="settled").reduce((s,b) => s + (b.platform_fee || Math.round((b.total_amount||0)*0.10)), 0)
-  const loveGiftCommission = completedBks.filter(b => b.booking_type==="love_gift").reduce((s,b) => s + (b.platform_fee || Math.round((b.total_amount||0)*0.10)), 0)
-  const serviceCommission = completedBks.filter(b => b.booking_type!=="love_gift").reduce((s,b) => s + (b.platform_fee || Math.round((b.total_amount||0)*0.10)), 0)
+  const getFee = (b) => calcCommission(b).fee
+  const totalCommission    = completedBks.reduce((s,b) => s + getFee(b), 0)
+  const settledCommission  = completedBks.filter(b => b.payment_status==="settled").reduce((s,b) => s + getFee(b), 0)
+  const pendingCommission  = completedBks.filter(b => b.payment_status!=="settled").reduce((s,b) => s + getFee(b), 0)
+  const loveGiftCommission = completedBks.filter(b => b.booking_type==="love_gift").reduce((s,b) => s + getFee(b), 0)
+  const serviceCommission  = completedBks.filter(b => b.booking_type!=="love_gift").reduce((s,b) => s + getFee(b), 0)
 
   const exportCSV = () => {
     const rows = [
@@ -5987,18 +6008,14 @@ function AdminSettlement() {
           loveGiftNet: 0,
         }
       }
-      const isLoveGift = b.booking_type === "love_gift"
-      const fee = b.platform_fee || Math.round((b.total_amount||0) * 0.10)
+      const { fee, salonGet } = calcCommission(b)
       summary[sid].totalSales += b.total_amount || 0
       summary[sid].platformFee += fee
-      if (isLoveGift) {
-        // إهداء محبة — المبلغ الكامل يصل للمالك ويخصم عمولة 10%
+      summary[sid].netAmount += salonGet
+      if (b.booking_type === "love_gift") {
         summary[sid].loveGiftAmount += b.total_amount || 0
         summary[sid].loveGiftFee += fee
-        summary[sid].loveGiftNet += (b.total_amount||0) - fee
-        summary[sid].netAmount += (b.total_amount||0) - fee
-      } else {
-        summary[sid].netAmount += b.salon_net_amount || (b.deposit_amount || 0) - fee
+        summary[sid].loveGiftNet += salonGet
       }
       summary[sid].bookingsCount++
       if (b.payment_status !== "settled") summary[sid].pendingCount++
