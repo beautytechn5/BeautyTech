@@ -1354,7 +1354,7 @@ function TermsPage({ setScreen }) {
     { t:"٢. رسوم الاشتراك", b:"تُدفع رسوم الاشتراك الشهرية أو السنوية حسب الباقة المختارة. الاشتراك السنوي يوفر شهراً مجانياً (11 شهراً فقط)." },
     { t:"٣. التجربة المجانية", b:"تُمنح تجربة مجانية لمدة 14 يوماً للصالون الجديد مرة واحدة فقط لكل صالون (يُتحقق بالإيميل ورقم الجوال)." },
     { t:"٤. عمولة المنصة", b:"تأخذ المنصة عمولة 10% من قيمة كل خدمة مُنجزة. تُخصم من العربون المدفوع من العميلة. مثال: خدمة 200 ر.س → عربون 60 ر.س → عمولة المنصة 20 ر.س → يُحوَّل للصالون 40 ر.س." },
-    { t:"٥. موعد التحويل", b:"يُحوَّل نصيب الصالون من العربون خلال 24-48 ساعة من تأكيد الحجز." },
+    { t:"٥. موعد التحويل", b:"تُحوَّل مستحقات الصالون يومياً في نهاية كل يوم." },
     { t:"٦. سياسة ترقية الباقة", b:"يمكن الترقية لباقة أعلى في أي وقت بدفع الفرق بين الباقتين + رسوم ترقية 100 ر.س. يتم التفعيل فور إتمام الدفع." },
     { t:"٧. سياسة تخفيض الباقة", b:"لا يمكن تخفيض الباقة إلا بعد انتهاء فترة الاشتراك الحالية. يُطبَّق التخفيض تلقائياً عند التجديد." },
     { t:"٨. إدارة الحجوزات", b:"الصالون مسؤول عن تحديث حالة الحجوزات (مكتمل/ملغي) في الوقت المناسب. التأخر يؤثر على موعد التحويل." },
@@ -1815,25 +1815,23 @@ function OwnerLogin({ setScreen }) {
    📊 OWNER DASHBOARD
 ══════════════════════════════════════════ */
 const ALL_OWN_TABS = [
-  { id:"overview",  icon:"📊", label:"نظرة عامة" },
-  { id:"bookings",  icon:"📅", label:"الحجوزات" },
-  { id:"services",  icon:"✂️",  label:"الخدمات" },
-  { id:"offers",    icon:"🏷️",  label:"عروض" },
-  { id:"packages",  icon:"🎁",  label:"باقات" },
-  { id:"inventory", icon:"🧴", label:"المخزون" },
-  { id:"whatsapp",  icon:"💬", label:"بوت واتساب" },
-  { id:"package",   icon:"📦", label:"باقتي" },
-  { id:"settings",  icon:"⚙️",  label:"الإعدادات" },
-  { id:"calendar",  icon:"🗓️", label:"المواعيد" },
-  { id:"staff",     icon:"👩💼", label:"الفريق" },
-  { id:"broadcast", icon:"📢", label:"رسائل" },
-  { id:"calendar",  icon:"🗓️", label:"التقويم" },
-  { id:"staff",     icon:"👩💼", label:"الموظفات" },
-  { id:"broadcast", icon:"📣", label:"رسائل" },
-  { id:"coupons",   icon:"🎟️", label:"كوبونات" },
-  { id:"reports",   icon:"📈", label:"التقارير" },
-  { id:"finance",   icon:"💰", label:"المالية" },
-  { id:"terms",     icon:"📋", label:"الشروط" },
+  { id:"overview",   icon:"📊", label:"نظرة عامة" },
+  { id:"bookings",   icon:"📅", label:"الحجوزات" },
+  { id:"calendar",   icon:"🗓️", label:"التقويم" },
+  { id:"love_gifts", icon:"💝", label:"إهداء محبة" },
+  { id:"services",   icon:"✂️",  label:"الخدمات" },
+  { id:"staff",      icon:"👩💼", label:"الفريق" },
+  { id:"offers",     icon:"🏷️",  label:"عروض" },
+  { id:"packages",   icon:"🎁",  label:"باقات" },
+  { id:"coupons",    icon:"🎟️", label:"كوبونات" },
+  { id:"inventory",  icon:"🧴", label:"المخزون" },
+  { id:"whatsapp",   icon:"💬", label:"واتساب" },
+  { id:"broadcast",  icon:"📢", label:"رسائل" },
+  { id:"reports",    icon:"📈", label:"التقارير" },
+  { id:"finance",    icon:"💰", label:"المالية" },
+  { id:"package",    icon:"📦", label:"باقتي" },
+  { id:"settings",   icon:"⚙️",  label:"الإعدادات" },
+  { id:"terms",      icon:"📋", label:"الشروط" },
 ]
 
 function OwnerDashboard({ setScreen }) {
@@ -1841,14 +1839,14 @@ function OwnerDashboard({ setScreen }) {
   const [tab, setTab] = useState("overview")
   const [salonInfo, setSalonInfo] = useState({ name:"...", trial_end:null, package:"basic" })
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) return
-      supabase.from('salons').select('name,trial_end,city,owner_name,phone,bio,email,package').eq('email', session.user.email).then(({ data }) => {
-        if (data && data[0]) setSalonInfo(data[0])
-      })
-    })
-  }, [])
+  const refreshSalonInfo = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    const { data } = await supabase.from('salons').select('name,trial_end,city,owner_name,phone,bio,email,package').eq('email', session.user.email)
+    if (data && data[0]) setSalonInfo({ ...data[0] })
+  }
+
+  useEffect(() => { refreshSalonInfo() }, [])
 
   const OWN_TABS = ALL_OWN_TABS
   const daysLeft = salonInfo.trial_end
@@ -1936,7 +1934,7 @@ function OwnerDashboard({ setScreen }) {
         )}
         {tab === "finance"   && <OwnerFinance toast={toast} />}
         {tab === "terms"     && <OwnerTerms />}
-        {tab === "package"   && <OwnerPackage toast={toast} />}
+        {tab === "package"   && <OwnerPackage toast={toast} onPkgChange={refreshSalonInfo} />}
         {tab === "offers"    && <OwnerOffers toast={toast} type="offer" />}
         {tab === "packages"  && <OwnerOffers toast={toast} type="package" />}
       </div>
@@ -3376,7 +3374,7 @@ function OwnerOffers({ toast, type = "offer" }) {
   )
 }
 
-function OwnerPackage({ toast }) {
+function OwnerPackage({ toast, onPkgChange }) {
   const [currentPkg, setCurrentPkg] = useState("pro")
   const [billing, setBilling] = useState("monthly")
 
@@ -4609,7 +4607,7 @@ function OwnerTerms() {
   ]
 
   const clientTerms = [
-    { t:"١. توزيع العربون", b:"العربون (30%): 10% للمنصة + 210% للصالون خلال 24-48 ساعة." },
+    { t:"١. توزيع العربون", b:"العربون (30%): 10% للمنصة + 210% للصالون يومياً." },
     { t:"٢. التزامات الصالون", b:"تقديم الخدمة بالوقت والجودة والسعر المعلن." },
     { t:"٣. الإلغاء من الصالون", b:"لو الصالون ألغى، يُرد العربون كاملاً للعميلة." },
     { t:"٤. التسعير", b:"يُحظر تغيير السعر بعد الحجز أو إضافة رسوم غير معلنة." },
@@ -5059,9 +5057,9 @@ function ContactPage({ setScreen }) {
         {/* Contact options */}
         <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:24 }}>
           {[
-            { icon:"💬", title:"واتساب", desc:"تواصل مباشر مع الدعم", action:"wa.me/9660552401658", color:T.waL, tcolor:"#25A050" },
+            { icon:"💬", title:"واتساب", desc:"تواصل مباشر مع الدعم", action:"https://wa.me/966552401658", color:T.waL, tcolor:"#25A050" },
             { icon:"📧", title:"البريد الإلكتروني", desc:"beauty.techn5@gmail.com", action:"mailto:beauty.techn5@gmail.com", color:T.roseL, tcolor:T.roseDp },
-            { icon:"📷", title:"إنستغرام", desc:"@beautytech_sa", action:"https://instagram.com/beautytech_sa", color:T.goldPale, tcolor:T.gold },
+            { icon:"📷", title:"إنستغرام", desc:"@beauty.Techn", action:"https://instagram.com/beauty.Techn", color:T.goldPale, tcolor:T.gold },
             { icon:"🎵", title:"تيك توك", desc:"@beautytech_sa", action:"https://tiktok.com/@beautytech_sa", color:"#E8F0FF", tcolor:"#4A4AFF" },
           ].map(it => (
             <a key={it.title} href={it.action} target="_blank" rel="noreferrer"
@@ -6731,8 +6729,8 @@ function Navbar({ screen, setScreen }) {
         ) : (
           <>
             <button onClick={() => setScreen("gift")}
-              style={{ padding:"7px 12px", borderRadius:50, border:`1.5px solid ${T.roseL}`, background:T.roseL, color:T.roseDp, fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
-              🎁 قسيمة هدية
+              style={{ padding:"7px 12px", borderRadius:50, border:"1.5px solid #F8BBD0", background:"linear-gradient(135deg,#FCE4EC,#F8BBD0)", color:"#C2185B", fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+              💝 إهداء محبة
             </button>
             <span onClick={() => setScreen("client-login")} style={{ fontSize:12, fontWeight:600, color:T.inkSoft, cursor:"pointer", padding:"6px 4px" }}>دخول</span>
             <span onClick={() => setScreen("client-register")} style={{ fontSize:12, fontWeight:600, color:T.inkSoft, cursor:"pointer", padding:"6px 4px" }}>تسجيل</span>
@@ -6831,8 +6829,7 @@ export default function App() {
                 {[
                   { label:"حجوزاتي", screen:"my-bookings", icon:"📅" },
                   { label:"عن المنصة", screen:"about", icon:"🌸" },
-                  { label:"قسيمة هدية", screen:"gift", icon:"🎁" },
-                  { label:"تواصل معنا", screen:"contact", icon:"💬" },
+                                    { label:"تواصل معنا", screen:"contact", icon:"💬" },
                   { label:"الأسئلة الشائعة", screen:"faq", icon:"❓" },
                   { label:"سياسة الخصوصية", screen:"privacy", icon:"🔒" },
                   { label:"الشروط والأحكام", screen:"terms-page", icon:"📋" },
