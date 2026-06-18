@@ -4343,6 +4343,9 @@ function OwnerFinance({ toast }) {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState("pending")
   const [salonId, setSalonId] = useState(null)
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
+  const [search, setSearch] = useState("")
 
   useEffect(() => {
     const load = async () => {
@@ -4362,81 +4365,140 @@ function OwnerFinance({ toast }) {
     load()
   }, [])
 
-  const pending   = bookings.filter(b => b.payment_status !== "settled")
-  const settled   = bookings.filter(b => b.payment_status === "settled")
+  // فلترة
+  const filtered = bookings.filter(b => {
+    if (dateFrom && b.appointment_date < dateFrom) return false
+    if (dateTo && b.appointment_date > dateTo) return false
+    if (search) {
+      const s = search.toLowerCase()
+      return (b.client_name||"").toLowerCase().includes(s) || (b.appointment_date||"").includes(s)
+    }
+    return true
+  })
 
-  const totalPending  = pending.reduce((s,b)  => s + (b.salon_net_amount || (b.deposit_amount||0) - (b.platform_fee || Math.round((b.total_amount||0)*0.10))), 0)
-  const totalSettled  = settled.reduce((s,b)  => s + (b.salon_net_amount || (b.deposit_amount||0) - (b.platform_fee || Math.round((b.total_amount||0)*0.10))), 0)
-  const totalFees     = bookings.reduce((s,b) => s + (b.platform_fee || Math.round((b.total_amount||0)*0.10)), 0)
+  const pending  = filtered.filter(b => b.payment_status !== "settled")
+  const settled  = filtered.filter(b => b.payment_status === "settled")
+  const loveGifts = filtered.filter(b => b.booking_type === "love_gift")
 
-  const list = tab === "pending" ? pending : settled
+  // حسابات دقيقة
+  // العربون الحجوزات العادية = deposit_amount - platform_fee
+  const calcNet = (b) => {
+    if (b.booking_type === "love_gift") {
+      // إهداء المحبة: المبلغ الكامل - 10% عمولة
+      const fee = b.platform_fee || Math.round((b.total_amount||0) * 0.10)
+      return (b.total_amount||0) - fee
+    } else {
+      // خدمة عادية: العربون - 10% عمولة
+      const fee = b.platform_fee || Math.round((b.total_amount||0) * 0.10)
+      return (b.deposit_amount||0) - fee
+    }
+  }
+
+  const totalPending  = pending.reduce((s,b)  => s + calcNet(b), 0)
+  const totalSettled  = settled.reduce((s,b)  => s + calcNet(b), 0)
+  const totalFees     = filtered.reduce((s,b) => s + (b.platform_fee || Math.round((b.total_amount||0)*0.10)), 0)
+  const totalLoveGift = loveGifts.reduce((s,b) => s + calcNet(b), 0)
+
+  const list = tab === "pending" ? pending : tab === "settled" ? settled : loveGifts
 
   return (
     <div>
       <div style={{ fontSize:16, fontWeight:800, color:T.ink, marginBottom:4 }}>💰 بياناتي المالية</div>
-      <div style={{ fontSize:11, color:T.inkSoft, marginBottom:16 }}>تتبع مستحقاتك من العربونات</div>
+      <div style={{ fontSize:11, color:T.inkSoft, marginBottom:16 }}>مستحقاتك بعد خصم عمولة المنصة (10%)</div>
 
       {/* ملخص مالي */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
         <div style={{ background:`linear-gradient(135deg,${T.gold},${T.gold2})`, borderRadius:14, padding:"14px", textAlign:"center" }}>
-          <div style={{ fontSize:22, fontWeight:900, color:T.white }}>{totalPending.toLocaleString()}</div>
-          <div style={{ fontSize:10, color:"rgba(255,255,255,.8)", marginTop:4 }}>⏳ معلق — لم يُحوَّل بعد</div>
+          <div style={{ fontSize:20, fontWeight:900, color:T.white }}>{totalPending.toLocaleString()}</div>
+          <div style={{ fontSize:10, color:"rgba(255,255,255,.85)", marginTop:3 }}>⏳ معلق — لم يُحوَّل بعد</div>
         </div>
         <div style={{ background:`linear-gradient(135deg,#2E7D32,#1B5E20)`, borderRadius:14, padding:"14px", textAlign:"center" }}>
-          <div style={{ fontSize:22, fontWeight:900, color:T.white }}>{totalSettled.toLocaleString()}</div>
-          <div style={{ fontSize:10, color:"rgba(255,255,255,.8)", marginTop:4 }}>✅ محوَّل لحسابك</div>
+          <div style={{ fontSize:20, fontWeight:900, color:T.white }}>{totalSettled.toLocaleString()}</div>
+          <div style={{ fontSize:10, color:"rgba(255,255,255,.85)", marginTop:3 }}>✅ محوَّل لحسابك</div>
+        </div>
+        <div style={{ background:"linear-gradient(135deg,#880E4F,#C2185B)", borderRadius:14, padding:"14px", textAlign:"center" }}>
+          <div style={{ fontSize:20, fontWeight:900, color:T.white }}>{totalLoveGift.toLocaleString()}</div>
+          <div style={{ fontSize:10, color:"rgba(255,255,255,.85)", marginTop:3 }}>💝 إهداء المحبة</div>
         </div>
         <div style={{ background:T.white, borderRadius:14, padding:"14px", textAlign:"center", border:`1px solid ${T.creamDk}` }}>
-          <div style={{ fontSize:20, fontWeight:900, color:T.roseDp }}>{(totalPending + totalSettled).toLocaleString()}</div>
-          <div style={{ fontSize:10, color:T.inkSoft, marginTop:4 }}>💼 إجمالي مستحقاتك</div>
-        </div>
-        <div style={{ background:T.white, borderRadius:14, padding:"14px", textAlign:"center", border:`1px solid ${T.creamDk}` }}>
-          <div style={{ fontSize:20, fontWeight:900, color:T.inkSoft }}>{totalFees.toLocaleString()}</div>
-          <div style={{ fontSize:10, color:T.inkSoft, marginTop:4 }}>🏦 عمولة المنصة (10%)</div>
+          <div style={{ fontSize:20, fontWeight:900, color:"#C62828" }}>{totalFees.toLocaleString()}</div>
+          <div style={{ fontSize:10, color:T.inkSoft, marginTop:3 }}>🏦 عمولة المنصة (10%)</div>
         </div>
       </div>
 
-      {/* شرح آلية الدفع */}
-      <div style={{ background:T.goldPale, borderRadius:12, padding:"12px 14px", marginBottom:16, border:`1px solid ${T.goldL}` }}>
-        <div style={{ fontSize:12, fontWeight:700, color:T.ink, marginBottom:6 }}>📌 آلية الدفع اليومية</div>
-        <div style={{ fontSize:11, color:T.inkSoft, lineHeight:1.9 }}>
-          • العربون (30%) يُدفع من العميلة عند الحجز<br/>
-          • المنصة تأخذ 10% عمولة من قيمة الخدمة<br/>
-          • الباقي يُحوَّل لحسابك <strong style={{ color:T.ink }}>يومياً</strong> في نهاية كل يوم<br/>
-          • التحويل عبر بوابة الراجحي للتحويلات الجماعية
+      {/* شرح آلية الحساب */}
+      <div style={{ background:T.goldPale, borderRadius:12, padding:"12px 14px", marginBottom:14, border:`1px solid ${T.goldL}` }}>
+        <div style={{ fontSize:12, fontWeight:700, color:T.ink, marginBottom:6 }}>📌 كيف تُحسب مستحقاتك؟</div>
+        <div style={{ fontSize:11, color:T.inkSoft, lineHeight:2 }}>
+          • <strong>خدمة عادية:</strong> العربون (30%) − عمولة المنصة (10% من الخدمة)<br/>
+          • <strong>إهداء المحبة:</strong> المبلغ الكامل − عمولة المنصة (10%)<br/>
+          • مثال خدمة 200 ر.س: عربون 60 ر.س − عمولة 20 ر.س = <strong style={{ color:T.green }}>40 ر.س لك</strong>
         </div>
       </div>
 
-      {/* كشف حساب اليوم */}
+      {/* DailyStatement */}
       <DailyStatement salonId={salonId} />
+
+      {/* فلاتر البحث */}
+      <div style={{ background:T.white, borderRadius:12, padding:"12px 14px", marginBottom:14, border:`1px solid ${T.creamDk}` }}>
+        <div style={{ fontSize:12, fontWeight:700, color:T.ink, marginBottom:10 }}>🔍 البحث والفلترة</div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
+          <div>
+            <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:4 }}>من تاريخ</label>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+              style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.creamDk}`, borderRadius:8, fontSize:12, fontFamily:"Tajawal,sans-serif", background:T.white }} />
+          </div>
+          <div>
+            <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:4 }}>إلى تاريخ</label>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+              style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.creamDk}`, borderRadius:8, fontSize:12, fontFamily:"Tajawal,sans-serif", background:T.white }} />
+          </div>
+        </div>
+        <input value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="ابحثي باسم العميلة أو التاريخ..."
+          style={{ width:"100%", padding:"9px 12px", border:`1px solid ${T.creamDk}`, borderRadius:8, fontSize:12, fontFamily:"Tajawal,sans-serif", background:T.cream, outline:"none" }} />
+        {(dateFrom || dateTo || search) && (
+          <button onClick={() => { setDateFrom(""); setDateTo(""); setSearch("") }}
+            style={{ marginTop:8, fontSize:11, color:T.roseDp, background:"none", border:"none", cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+            ✕ إلغاء الفلاتر
+          </button>
+        )}
+      </div>
 
       {/* تبويبات */}
       <div style={{ display:"flex", background:T.white, borderRadius:12, overflow:"hidden", marginBottom:14, border:`1px solid ${T.creamDk}` }}>
         {[
-          { id:"pending",  label:`⏳ معلق (${pending.length})` },
-          { id:"settled",  label:`✅ محوَّل (${settled.length})` },
+          { id:"pending",   label:`⏳ معلق (${pending.length})` },
+          { id:"settled",   label:`✅ محوَّل (${settled.length})` },
+          { id:"love_gift", label:`💝 إهداء (${loveGifts.length})` },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            style={{ flex:1, padding:"10px", border:"none", borderBottom:`3px solid ${tab===t.id ? T.roseDp : "transparent"}`, background:"transparent", cursor:"pointer", fontSize:12, fontWeight:tab===t.id ? 700 : 400, color:tab===t.id ? T.roseDp : T.inkSoft, fontFamily:"Tajawal,sans-serif" }}>
+            style={{ flex:1, padding:"10px 4px", border:"none", borderBottom:`3px solid ${tab===t.id ? T.roseDp : "transparent"}`, background:"transparent", cursor:"pointer", fontSize:11, fontWeight:tab===t.id ? 700 : 400, color:tab===t.id ? T.roseDp : T.inkSoft, fontFamily:"Tajawal,sans-serif" }}>
             {t.label}
           </button>
         ))}
       </div>
 
       {loading && <div style={{ textAlign:"center", padding:30, color:T.inkSoft }}>...جاري التحميل</div>}
-      {!loading && list.length === 0 && <Empty icon="💰" title="لا توجد معاملات" desc={tab==="pending" ? "كل مستحقاتك محوَّلة ✅" : "لم يتم تحويل أي مبالغ بعد"} />}
+      {!loading && list.length === 0 && <Empty icon="💰" title="لا توجد معاملات" desc={tab==="pending" ? "كل مستحقاتك محوَّلة ✅" : "لا توجد بيانات"} />}
 
       <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
         {list.map(bk => {
-          const netAmount = bk.salon_net_amount || (bk.deposit_amount||0) - (bk.platform_fee || Math.round((bk.total_amount||0)*0.10))
+          const isLove = bk.booking_type === "love_gift"
           const fee = bk.platform_fee || Math.round((bk.total_amount||0)*0.10)
+          const netAmount = calcNet(bk)
           return (
-            <div key={bk.id} style={{ background:T.white, borderRadius:14, padding:"14px 16px", border:`1.5px solid ${bk.payment_status==="settled" ? "#E8F5E9" : T.roseL}` }}>
+            <div key={bk.id} style={{ background:T.white, borderRadius:14, padding:"14px 16px", border:`1.5px solid ${isLove ? "#F8BBD0" : bk.payment_status==="settled" ? "#E8F5E9" : T.roseL}` }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
                 <div>
-                  <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{bk.client_name}</div>
-                  <div style={{ fontSize:11, color:T.inkSoft }}>📅 {bk.appointment_date} · ⏰ {bk.appointment_time}</div>
-                  {bk.service_name && <div style={{ fontSize:11, color:T.roseDp }}>✂️ {bk.service_name}</div>}
+                  <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                    <span style={{ fontSize:14 }}>{isLove ? "💝" : "✂️"}</span>
+                    <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{bk.client_name}</div>
+                  </div>
+                  <div style={{ fontSize:11, color:T.inkSoft, marginTop:2 }}>
+                    📅 {bk.appointment_date} · ⏰ {bk.appointment_time}
+                  </div>
+                  {bk.service_name && <div style={{ fontSize:11, color:T.roseDp, marginTop:2 }}>{bk.service_name}</div>}
                 </div>
                 <span style={{ background:bk.payment_status==="settled" ? "#E8F5E9" : T.roseL, color:bk.payment_status==="settled" ? T.green : T.roseDp, fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20 }}>
                   {bk.payment_status === "settled" ? "✅ محوَّل" : "⏳ معلق"}
@@ -4444,27 +4506,46 @@ function OwnerFinance({ toast }) {
               </div>
 
               <div style={{ background:T.cream, borderRadius:10, padding:"10px 12px" }}>
-                {[
-                  ["قيمة الخدمة", (bk.total_amount||0) + " ر.س", T.ink],
-                  ["العربون المدفوع (30%)", (bk.deposit_amount||0) + " ر.س", T.ink],
-                  ["عمولة المنصة (10%)", fee + " ر.س", "#C62828"],
-                  ["نصيبك من العربون", netAmount + " ر.س", T.green],
-                ].map(r => (
-                  <div key={r[0]} style={{ display:"flex", justifyContent:"space-between", fontSize:11, padding:"3px 0", borderBottom:`1px solid ${T.creamDk}` }}>
-                    <span style={{ color:T.inkSoft }}>{r[0]}</span>
-                    <span style={{ fontWeight:700, color:r[2] }}>{r[1]}</span>
-                  </div>
-                ))}
+                {isLove ? (
+                  // إهداء المحبة — المبلغ الكامل
+                  <>
+                    {[
+                      ["💝 مبلغ الإهداء الكامل", (bk.total_amount||0).toLocaleString() + " ر.س", T.ink],
+                      ["عمولة المنصة (10%)", fee.toLocaleString() + " ر.س", "#C62828"],
+                      ["✅ صافي مستحقاتك", netAmount.toLocaleString() + " ر.س", T.green],
+                    ].map(r => (
+                      <div key={r[0]} style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"4px 0", borderBottom:`1px solid ${T.creamDk}` }}>
+                        <span style={{ color:T.inkSoft }}>{r[0]}</span>
+                        <span style={{ fontWeight:700, color:r[2] }}>{r[1]}</span>
+                      </div>
+                    ))}
+                  </>
+                ) : (
+                  // خدمة عادية — العربون
+                  <>
+                    {[
+                      ["قيمة الخدمة الكاملة", (bk.total_amount||0).toLocaleString() + " ر.س", T.inkSoft],
+                      ["العربون المدفوع (30%)", (bk.deposit_amount||0).toLocaleString() + " ر.س", T.ink],
+                      ["عمولة المنصة (10%)", fee.toLocaleString() + " ر.س", "#C62828"],
+                      ["✅ صافي مستحقاتك", netAmount.toLocaleString() + " ر.س", T.green],
+                    ].map(r => (
+                      <div key={r[0]} style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"4px 0", borderBottom:`1px solid ${T.creamDk}` }}>
+                        <span style={{ color:T.inkSoft }}>{r[0]}</span>
+                        <span style={{ fontWeight:700, color:r[2] }}>{r[1]}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
 
-              {bk.payment_status === "settled" && bk.updated_at && (
-                <div style={{ fontSize:10, color:T.green, marginTop:6, textAlign:"left" }}>
-                  ✅ تم التحويل: {new Date(bk.updated_at).toLocaleDateString("ar-SA")}
+              {bk.payment_status === "settled" && bk.settled_at && (
+                <div style={{ fontSize:10, color:T.green, marginTop:6 }}>
+                  ✅ تم التحويل: {new Date(bk.settled_at).toLocaleDateString("ar-SA")}
                 </div>
               )}
               {bk.payment_status !== "settled" && (
-                <div style={{ fontSize:10, color:T.inkSoft, marginTop:6, textAlign:"left" }}>
-                  ⏳ التحويل في نهاية اليوم
+                <div style={{ fontSize:10, color:T.inkSoft, marginTop:6 }}>
+                  ⏳ في انتظار التحويل اليومي
                 </div>
               )}
             </div>
@@ -6143,15 +6224,15 @@ function AdminSalonsList({ salonsList, onUpdate }) {
     s.email?.toLowerCase().includes(search.toLowerCase())
   )
 
-  const changePkg = async (salonId, pkg) => {
+  const changePkg = async (sid, pkg) => {
     setSaving(true)
-    const { error } = await supabase.from("salons").update({ package: pkg }).eq("id", salonId)
+    const { error } = await supabase.from("salons").update({ package: pkg }).eq("id", sid)
     setSaving(false)
     if (error) { toast("⚠ حدث خطأ: " + error.message); return }
-    toast("✅ تم تغيير الباقة فوراً!")
+    toast("✅ تم تغيير الباقة!")
     setEditId(null)
     setNewPkg("")
-    onUpdate()
+    onUpdate()   // يعيد جلب القائمة من Supabase
   }
 
   const PKG_LABELS = {
@@ -6487,10 +6568,9 @@ function AdminDashboard({ setScreen }) {
         )}
 
         {tab === "salons" && (
-          <AdminSalonsList salonsList={salonsList} onUpdate={() => {
-            supabase.from("salons").select("*").then(({ data }) => {
-              if (data) setSalonsList(data)
-            })
+          <AdminSalonsList salonsList={salonsList} onUpdate={async () => {
+            const { data } = await supabase.from("salons").select("*")
+            if (data) setSalonsList([...data])   // spread عشان يجبر React على re-render
           }} />
         )}
 
