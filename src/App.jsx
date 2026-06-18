@@ -5666,7 +5666,7 @@ function AdminCommissions() {
   const [bookings, setBookings] = useState([])
   const [loading, setLoading] = useState(true)
   const [dateFrom, setDateFrom] = useState(() => {
-    const d = new Date(); d.setDate(1); return d.toISOString().split("T")[0]
+    const d = new Date(); d.setFullYear(d.getFullYear() - 1); return d.toISOString().split("T")[0]
   })
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().split("T")[0])
   const toast = useToast()
@@ -5675,9 +5675,9 @@ function AdminCommissions() {
 
   const load = async () => {
     setLoading(true)
+    // جلب كل الحجوزات (مكتملة ومعلقة) لحساب العمولات الكاملة
     const { data } = await supabase.from("bookings")
       .select("*, salons(name)")
-      .eq("status", "completed")
       .gte("appointment_date", dateFrom)
       .lte("appointment_date", dateTo)
       .order("appointment_date", { ascending: false })
@@ -5685,11 +5685,13 @@ function AdminCommissions() {
     setLoading(false)
   }
 
-  const totalCommission = bookings.reduce((s,b) => s + (b.platform_fee||0), 0)
-  const settledCommission = bookings.filter(b => b.payment_status==="settled").reduce((s,b) => s + (b.platform_fee||0), 0)
-  const pendingCommission = bookings.filter(b => b.payment_status!=="settled").reduce((s,b) => s + (b.platform_fee||0), 0)
-  const loveGiftCommission = bookings.filter(b => b.booking_type==="love_gift").reduce((s,b) => s + (b.platform_fee||0), 0)
-  const serviceCommission = bookings.filter(b => b.booking_type!=="love_gift").reduce((s,b) => s + (b.platform_fee||0), 0)
+  // العمولة = 10% من قيمة الخدمة لكل حجز (مكتمل أو معلق)
+  const completedBks = bookings.filter(b => b.status === "completed")
+  const totalCommission = completedBks.reduce((s,b) => s + (b.platform_fee || Math.round((b.total_amount||0)*0.10)), 0)
+  const settledCommission = completedBks.filter(b => b.payment_status==="settled").reduce((s,b) => s + (b.platform_fee || Math.round((b.total_amount||0)*0.10)), 0)
+  const pendingCommission = completedBks.filter(b => b.payment_status!=="settled").reduce((s,b) => s + (b.platform_fee || Math.round((b.total_amount||0)*0.10)), 0)
+  const loveGiftCommission = completedBks.filter(b => b.booking_type==="love_gift").reduce((s,b) => s + (b.platform_fee || Math.round((b.total_amount||0)*0.10)), 0)
+  const serviceCommission = completedBks.filter(b => b.booking_type!=="love_gift").reduce((s,b) => s + (b.platform_fee || Math.round((b.total_amount||0)*0.10)), 0)
 
   const exportCSV = () => {
     const rows = [
@@ -5808,7 +5810,6 @@ function AdminSettlement() {
   const [dayFilter, setDayFilter] = useState("today")
   const [selectedSalon, setSelectedSalon] = useState("all")
   const [settling, setSettling] = useState(false)
-  const [autoSettle, setAutoSettle] = useState(false)
   const [history, setHistory] = useState([])
   const [showHistory, setShowHistory] = useState(false)
   const toast = useToast()
@@ -5844,13 +5845,20 @@ function AdminSettlement() {
   const loadData = async () => {
     setLoading(true)
     const { from, to } = getDayRange()
+    // جلب الحجوزات المكتملة في الفترة + كل المعلقة (بغض النظر عن التاريخ)
     const { data: bks } = await supabase.from("bookings")
       .select("*, salons(name, phone, iban, bank_name)")
-      .gte("appointment_date", from)
-      .lte("appointment_date", to)
       .eq("status", "completed")
     const { data: sls } = await supabase.from("salons").select("id,name,phone,iban,bank_name")
-    setBookings(bks || [])
+    // فلترة حسب الفترة للعرض فقط
+    const filtered = (bks || []).filter(b => {
+      if (dayFilter === "today" || dayFilter === "yesterday") {
+        return b.appointment_date >= from && b.appointment_date <= to
+      }
+      // "week" + الافتراضي: اعرض كل المعلقة + الفترة
+      return b.payment_status !== "settled" || (b.appointment_date >= from && b.appointment_date <= to)
+    })
+    setBookings(filtered)
     setSalons(sls || [])
     setLoading(false)
   }
@@ -5977,16 +5985,14 @@ function AdminSettlement() {
         ))}
       </div>
 
-      {/* تفعيل التسوية التلقائية */}
-      <div style={{ background:autoSettle ? T.greenL : T.cream, borderRadius:12, padding:"12px 14px", marginBottom:12, border:`1px solid ${autoSettle ? T.green : T.creamDk}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <div>
-          <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>⚡ التسوية التلقائية اليومية</div>
-          <div style={{ fontSize:11, color:T.inkSoft }}>تجهيز ملف CSV يومياً تلقائياً</div>
+      {/* شرح التسوية */}
+      <div style={{ background:T.goldPale, borderRadius:12, padding:"10px 14px", marginBottom:12, border:`1px solid ${T.goldL}` }}>
+        <div style={{ fontSize:12, color:T.inkSoft, lineHeight:1.8 }}>
+          📌 <strong style={{ color:T.ink }}>خطوات التسوية:</strong><br/>
+          ١. صدّر ملف CSV واحفظه<br/>
+          ٢. ارفعه للبنك وحوّل المبالغ<br/>
+          ٣. ارجع واضغط "اعتماد التحويل"
         </div>
-        <button onClick={() => { setAutoSettle(!autoSettle); toast(autoSettle ? "تم إيقاف التسوية التلقائية" : "✅ تم تفعيل التسوية التلقائية اليومية") }}
-          style={{ padding:"7px 14px", borderRadius:20, border:"none", background:autoSettle ? T.green : T.creamDk, color:autoSettle ? T.white : T.inkSoft, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
-          {autoSettle ? "مفعّل ✓" : "تفعيل"}
-        </button>
       </div>
 
       <div style={{ fontSize:11, color:T.inkSoft, marginBottom:16, background:T.cream, padding:"8px 12px", borderRadius:8 }}>
