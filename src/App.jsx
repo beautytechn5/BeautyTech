@@ -1987,13 +1987,20 @@ function OwnerBookings() {
         {filtered.map(bk => {
           const st = STATUS[bk.status] || STATUS.pending
           return (
-            <Card key={bk.id} style={{ padding:14 }}>
+            <Card key={bk.id} style={{ padding:14, border: bk.booking_type==="love_gift" ? "2px solid #F48FB1" : bk.booking_type==="voucher" ? `2px solid ${T.greenL}` : bk.booking_type==="offer" ? `2px solid ${T.roseL}` : bk.booking_type==="package" ? `2px solid ${T.goldL}` : "none" }}>
+              {/* شريط مميز لإهداء المحبة */}
+              {bk.booking_type === "love_gift" && (
+                <div style={{ background:"linear-gradient(135deg,#F48FB1,#E91E63)", borderRadius:"10px 10px 0 0", margin:"-14px -14px 10px -14px", padding:"8px 14px", display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:16 }}>💝</span>
+                  <span style={{ fontSize:12, fontWeight:800, color:"#fff" }}>إهداء محبة — المبلغ الكامل مدفوع مسبقاً</span>
+                </div>
+              )}
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
                 <div style={{ fontSize:14, fontWeight:800, color:T.ink }}>{bk.client_name}</div>
                 <span style={{ background:st.bg, color:st.color, fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20 }}>{st.label}</span>
               </div>
               <div style={{ fontSize:12, color:T.inkSoft, marginBottom:4 }}>
-                {bk.booking_type === "offer" ? "🏷️ عرض خاص" : bk.booking_type === "package" ? "🎁 باقة" : "✂️ خدمة"} {bk.service_name && `· ${bk.service_name}`}
+                {bk.booking_type === "offer" ? "🏷️ عرض خاص" : bk.booking_type === "package" ? "🎁 باقة" : bk.booking_type === "love_gift" ? "💝 إهداء محبة" : bk.booking_type === "voucher" ? "🎟️ قسيمة هدية" : "✂️ خدمة"} {bk.service_name && `· ${bk.service_name}`}
               </div>
               <div style={{ fontSize:11, color:T.inkMuted, marginBottom:2 }}>
                 🕐 تاريخ الحجز: {bk.created_at ? new Date(bk.created_at).toLocaleDateString('ar-SA') : "—"}
@@ -2002,8 +2009,17 @@ function OwnerBookings() {
                 📞 {bk.client_phone} · 📅 {bk.appointment_date} · ⏰ {bk.appointment_time}
               </div>
               <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, marginBottom:10 }}>
-                <span style={{ color:T.inkSoft }}>المبلغ: <span style={{ color:T.ink, fontWeight:700 }}>{bk.total_amount} ر.س</span></span>
-                <span style={{ color:T.inkSoft }}>العربون: <span style={{ color:T.gold, fontWeight:700 }}>{bk.deposit_amount} ر.س</span></span>
+                {bk.booking_type === "love_gift" ? (
+                  <>
+                    <span style={{ color:T.inkSoft }}>المبلغ الكامل: <span style={{ color:"#E91E63", fontWeight:700 }}>{bk.total_amount} ر.س</span></span>
+                    <span style={{ color:T.inkSoft }}>صافيك: <span style={{ color:T.green, fontWeight:700 }}>{(bk.total_amount||0) - (bk.platform_fee || Math.round((bk.total_amount||0)*0.10))} ر.س</span></span>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ color:T.inkSoft }}>المبلغ: <span style={{ color:T.ink, fontWeight:700 }}>{bk.total_amount} ر.س</span></span>
+                    <span style={{ color:T.inkSoft }}>العربون: <span style={{ color:T.gold, fontWeight:700 }}>{bk.deposit_amount} ر.س</span></span>
+                  </>
+                )}
               </div>
               {bk.status === "pending" && (
                 <div style={{ display:"flex", gap:8 }}>
@@ -2405,6 +2421,8 @@ function OwnerRecentBookings({ stats }) {
                 <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
                   <span style={{ background:st.bg, color:st.color, fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>{st.label}</span>
                   {bk.booking_type === "offer" && <span style={{ background:T.roseL, color:T.roseDp, fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>🏷️ عرض</span>}
+                  {bk.booking_type === "love_gift" && <span style={{ background:"#FCE4EC", color:"#E91E63", fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>💝 إهداء محبة</span>}
+                  {bk.booking_type === "voucher" && <span style={{ background:T.greenL, color:T.green, fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>🎟️ قسيمة</span>}
                   {bk.booking_type === "package" && <span style={{ background:T.goldPale, color:T.gold, fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>🎁 باقة</span>}
                   <span style={{ fontSize:11, color:T.inkMuted }}>{selected===bk.id ? "▲" : "▼"}</span>
                 </div>
@@ -5606,6 +5624,8 @@ function MyBookingsPage({ setScreen }) {
                   <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4 }}>
                   <span style={{ background:st.bg, color:st.color, fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:20 }}>{st.label}</span>
                   {bk.booking_type === "offer" && <span style={{ background:T.roseL, color:T.roseDp, fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>🏷️ عرض</span>}
+                  {bk.booking_type === "love_gift" && <span style={{ background:"#FCE4EC", color:"#E91E63", fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>💝 إهداء محبة</span>}
+                  {bk.booking_type === "voucher" && <span style={{ background:T.greenL, color:T.green, fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>🎟️ قسيمة</span>}
                   {bk.booking_type === "package" && <span style={{ background:T.goldPale, color:T.gold, fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>🎁 باقة</span>}
                 </div>
                 </div>
