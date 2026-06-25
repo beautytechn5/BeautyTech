@@ -217,7 +217,8 @@ function useSalons() {
   const [data, setData] = useState([])
   useEffect(() => {
     const load = async () => {
-      const { data: rows } = await supabase.from('salons').select('*')
+      // فقط الصالونات المُفعَّلة (دفعت رسوم التأسيس وتأكدت من المنصة) تظهر للعميلات
+      const { data: rows } = await supabase.from('salons').select('*').eq('visible', true)
       if (!rows) return
       // جلب الخدمات لكل صالون
       const { data: allServices } = await supabase.from('services').select('*').eq('active', true)
@@ -1615,6 +1616,7 @@ function OwnerRegister({ setScreen }) {
       billing: billing,
       skip_trial: skipTrial,
       trial_end: skipTrial ? null : trialEnd.toISOString(),
+      visible: false,   // مخفي عن العميلات حتى تتأكد المنصة من دفع رسوم التأسيس
     }]).select()
     setLoading(false)
     if (error) { toast("⚠ حدث خطأ: " + error.message); return }
@@ -3954,6 +3956,15 @@ function OwnerPackage({ toast, onPkgChange }) {
 function OwnerCalendar({ toast }) {
   const [bookings, setBookings] = useState([])
   const [loading, setLoading] = useState(true)
+
+  // تنسيق محلي للتاريخ (يتجنب مشاكل تحويل UTC التي تُزحزح اليوم)
+  const toLocalDateStr = (d) => {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, "0")
+    const day = String(d.getDate()).padStart(2, "0")
+    return `${y}-${m}-${day}`
+  }
+
   const [weekStart, setWeekStart] = useState(() => {
     const d = new Date()
     d.setDate(d.getDate() - d.getDay() + 6) // السبت
@@ -3974,8 +3985,8 @@ function OwnerCalendar({ toast }) {
     if (!session) { setLoading(false); return }
     const { data: salon } = await supabase.from("salons").select("id").eq("email", session.user.email)
     if (!salon?.[0]) { setLoading(false); return }
-    const from = days[0].toISOString().split("T")[0]
-    const to = days[6].toISOString().split("T")[0]
+    const from = toLocalDateStr(days[0])
+    const to = toLocalDateStr(days[6])
     const { data } = await supabase.from("bookings").select("*")
       .eq("salon_id", salon[0].id)
       .gte("appointment_date", from)
@@ -3988,10 +3999,10 @@ function OwnerCalendar({ toast }) {
   const prevWeek = () => { const d = new Date(weekStart); d.setDate(d.getDate()-7); setWeekStart(d) }
   const nextWeek = () => { const d = new Date(weekStart); d.setDate(d.getDate()+7); setWeekStart(d) }
 
-  const dayNames = ["سبت","أحد","اثنين","ثلاثاء","أربعاء","خميس","جمعة"]
+  const DAY_NAMES_BY_JS_INDEX = ["أحد","اثنين","ثلاثاء","أربعاء","خميس","جمعة","سبت"] // getDay(): 0=أحد ... 6=سبت
   const STATUS_COLORS = { pending:T.gold, confirmed:T.green, completed:T.inkSoft, cancelled:T.red }
 
-  const today = new Date().toISOString().split("T")[0]
+  const today = toLocalDateStr(new Date())
 
   return (
     <div>
@@ -4012,7 +4023,7 @@ function OwnerCalendar({ toast }) {
       {/* أيام الأسبوع */}
       <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
         {days.map((day, i) => {
-          const dateStr = day.toISOString().split("T")[0]
+          const dateStr = toLocalDateStr(day)
           const dayBks = bookings.filter(b => b.appointment_date === dateStr)
           const isToday = dateStr === today
           return (
@@ -4020,7 +4031,7 @@ function OwnerCalendar({ toast }) {
               {/* هيدر اليوم */}
               <div style={{ padding:"10px 14px", background:isToday ? T.roseL : T.cream, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                 <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                  <div style={{ fontSize:13, fontWeight:800, color:isToday ? T.roseDp : T.ink }}>{dayNames[i]}</div>
+                  <div style={{ fontSize:13, fontWeight:800, color:isToday ? T.roseDp : T.ink }}>{DAY_NAMES_BY_JS_INDEX[day.getDay()]}</div>
                   <div style={{ fontSize:11, color:T.inkSoft }}>{day.toLocaleDateString("ar-SA", { month:"short", day:"numeric" })}</div>
                   {isToday && <span style={{ background:T.roseDp, color:T.white, fontSize:9, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>اليوم</span>}
                 </div>
@@ -6871,6 +6882,13 @@ function AdminSalonsList({ salonsList, onUpdate }) {
     onUpdate()   // يعيد جلب القائمة من Supabase
   }
 
+  const toggleVisible = async (sid, current) => {
+    const { error } = await supabase.from("salons").update({ visible: !current }).eq("id", sid)
+    if (error) { toast("⚠ حدث خطأ: " + error.message); return }
+    toast(!current ? "✅ الصالون ظاهر الآن للعميلات" : "🚫 تم إخفاء الصالون عن العميلات")
+    onUpdate()
+  }
+
   const PKG_LABELS = {
     basic: { label:"📦 أساسية", color:T.inkSoft, bg:T.creamDk },
     pro:   { label:"⚡ توسع",   color:T.gold,    bg:T.goldPale },
@@ -6908,6 +6926,17 @@ function AdminSalonsList({ salonsList, onUpdate }) {
               <span style={{ background:PKG_LABELS[s.package||"basic"]?.bg, color:PKG_LABELS[s.package||"basic"]?.color, fontSize:11, fontWeight:700, padding:"4px 12px", borderRadius:20 }}>
                 {PKG_LABELS[s.package||"basic"]?.label}
               </span>
+            </div>
+
+            {/* حالة الظهور للعميلات — يضمن وصول رسوم التأسيس قبل النشر */}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:s.visible ? T.greenL : "#FFF3E0", borderRadius:10, padding:"8px 12px", marginBottom:10 }}>
+              <span style={{ fontSize:12, fontWeight:700, color:s.visible ? T.green : "#E65100" }}>
+                {s.visible ? "👁️ ظاهر للعميلات" : "🚫 مخفي — بانتظار رسوم التأسيس (600 ر.س)"}
+              </span>
+              <button onClick={() => toggleVisible(s.id, s.visible)}
+                style={{ padding:"5px 14px", borderRadius:20, border:"none", background:s.visible ? "#E65100" : T.green, color:T.white, fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                {s.visible ? "إخفاء" : "✅ تفعيل الظهور"}
+              </button>
             </div>
 
             {/* تغيير الباقة */}
@@ -7095,6 +7124,7 @@ function AdminDashboard({ setScreen }) {
                 { label:"📅 حجز إجمالي", value:stats.bookings, key:"bookings" },
                 { label:"🎁 في التجربة", value:salonsList.filter(s => s.trial_end && new Date(s.trial_end) > new Date()).length, key:"trial" },
                 { label:"✅ انتهت تجربتهم", value:salonsList.filter(s => s.trial_end && new Date(s.trial_end) < new Date()).length, key:"trial_done" },
+                { label:"🚫 مخفية (بانتظار الدفع)", value:salonsList.filter(s => !s.visible).length, key:"hidden" },
                 { label:"💰 إيرادات/شهر", value:monthlyRevenue.toLocaleString()+" ر.س", key:"revenue", gold2:true },
               ].map(st => (
                 <div key={st.key} onClick={() => setAdminModal(st.key)}
