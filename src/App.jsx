@@ -241,6 +241,7 @@ function useSalons() {
         imageUrl: s.image_url || "",
         gallery: s.gallery || [],
         availNow: true,
+        workingHours: s.working_hours || null,
         hasOffers: (allOffers || []).some(o => o.salon_id === s.id && o.type === 'offer'),
         hasPackages: (allOffers || []).some(o => o.salon_id === s.id && o.type === 'package'),
       })))
@@ -1067,6 +1068,27 @@ function SalonDetailPage({ salon, setScreen, setSalon }) {
             </button>
           )}
         </Card>
+
+        {/* أوقات العمل */}
+        {salon.workingHours && (
+          <Card style={{ padding:16, marginBottom:14 }}>
+            <div style={{ fontSize:14, fontWeight:800, color:T.ink, marginBottom:10 }}>🕐 أوقات العمل</div>
+            <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+              {["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"].map(day => {
+                const d = salon.workingHours[day]
+                const isToday = new Date().toLocaleDateString("ar-SA", { weekday:"long" }) === day
+                return (
+                  <div key={day} style={{ display:"flex", justifyContent:"space-between", padding:"4px 0", background:isToday ? T.roseL : "transparent", borderRadius:8, paddingRight:isToday?8:0, paddingLeft:isToday?8:0 }}>
+                    <span style={{ fontSize:12, fontWeight:isToday?700:500, color:isToday ? T.roseDp : T.ink }}>{day}{isToday && " (اليوم)"}</span>
+                    <span style={{ fontSize:12, color:d?.open === false ? T.red : T.inkSoft, fontWeight:d?.open === false ? 700 : 400 }}>
+                      {!d || d.open === false ? "مغلق" : `${d.from} — ${d.to}`}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </Card>
+        )}
 
         {/* Services */}
         {/* عروض وباقات */}
@@ -1938,6 +1960,7 @@ function OwnerLogin({ setScreen }) {
 ══════════════════════════════════════════ */
 const ALL_OWN_TABS = [
   { id:"overview",   icon:"📊", label:"نظرة عامة" },
+  { id:"hours",      icon:"🕐", label:"الأوقات" },
   { id:"bookings",   icon:"📅", label:"الحجوزات" },
   { id:"calendar",   icon:"🗓️", label:"التقويم" },
   { id:"love_gifts", icon:"💝", label:"إهداء محبة" },
@@ -2057,6 +2080,7 @@ function OwnerDashboard({ setScreen }) {
       {/* Content */}
       <div style={{ padding:"18px 16px" }}>
         {tab === "overview"  && <OwnerOverview />}
+        {tab === "hours"     && <OwnerHours toast={toast} />}
         {tab === "bookings"  && <OwnerBookings />}
         {tab === "love_gifts" && <OwnerLoveGifts toast={toast} />}
         {tab === "services"  && <OwnerServices toast={toast} />}
@@ -2994,6 +3018,123 @@ function OwnerOverview() {
         </div>
         <OwnerRecentBookings stats={ownerStats} />
       </Card>
+    </div>
+  )
+}
+
+/* ══════════════════════════════════════════
+   🕐 OWNER HOURS — أوقات عمل الصالون الرئيسية
+   جدول دوام عام يغطي كل أيام وساعات عمل الصالون
+══════════════════════════════════════════ */
+function OwnerHours({ toast }) {
+  const [salonId, setSalonId] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const HOUR_DAYS = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"]
+  const HOUR_TIMES = ["00:00","00:30","01:00","01:30","02:00","02:30","03:00","03:30","04:00","04:30","05:00","05:30","06:00","06:30","07:00","07:30","08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00","21:30","22:00","22:30","23:00","23:30"]
+
+  const defaultSchedule = () => {
+    const sched = {}
+    HOUR_DAYS.forEach(d => { sched[d] = { open: true, from: "09:00", to: "21:00" } })
+    return sched
+  }
+
+  const [schedule, setSchedule] = useState(defaultSchedule())
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { setLoading(false); return }
+      const { data } = await supabase.from('salons').select('id, working_hours').eq('email', session.user.email)
+      if (data?.[0]) {
+        setSalonId(data[0].id)
+        if (data[0].working_hours) {
+          setSchedule({ ...defaultSchedule(), ...data[0].working_hours })
+        }
+      }
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const toggleDayOpen = (day) => {
+    setSchedule(s => ({ ...s, [day]: { ...s[day], open: !s[day].open } }))
+  }
+  const setDayTime = (day, key, value) => {
+    setSchedule(s => ({ ...s, [day]: { ...s[day], [key]: value } }))
+  }
+  const applyToAll = (from, to) => {
+    setSchedule(s => {
+      const next = { ...s }
+      HOUR_DAYS.forEach(d => { next[d] = { ...next[d], from, to } })
+      return next
+    })
+  }
+
+  const save = async () => {
+    if (!salonId) return
+    setSaving(true)
+    const { error } = await supabase.from('salons').update({ working_hours: schedule }).eq('id', salonId)
+    setSaving(false)
+    if (error) { toast("⚠ حدث خطأ: " + error.message); return }
+    toast("✅ تم حفظ أوقات العمل!")
+  }
+
+  if (loading) return <div style={{ textAlign:"center", padding:40, color:T.inkSoft }}>...جاري التحميل</div>
+
+  return (
+    <div>
+      <div style={{ fontSize:16, fontWeight:800, color:T.ink, marginBottom:4 }}>🕐 أوقات عمل الصالون</div>
+      <div style={{ fontSize:11, color:T.inkSoft, marginBottom:16 }}>حددي أيام وساعات دوام الصالون بشكل عام — هذا يساعد العميلات على معرفة متى تقدر تحجز</div>
+
+      <div style={{ background:T.goldPale, borderRadius:12, padding:"12px 14px", marginBottom:16, border:`1px solid ${T.goldL}` }}>
+        <div style={{ fontSize:12, fontWeight:700, color:T.ink, marginBottom:8 }}>⚡ تطبيق سريع على كل الأيام</div>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          {[["09:00","21:00","9ص - 9م"],["10:00","22:00","10ص - 10م"],["08:00","20:00","8ص - 8م"]].map(p => (
+            <button key={p[2]} onClick={() => applyToAll(p[0], p[1])}
+              style={{ padding:"6px 14px", borderRadius:20, border:`1px solid ${T.gold}`, background:T.white, color:T.gold, fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+              {p[2]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:18 }}>
+        {HOUR_DAYS.map(day => {
+          const d = schedule[day] || { open:true, from:"09:00", to:"21:00" }
+          return (
+            <div key={day} style={{ background:T.white, borderRadius:12, padding:"12px 14px", border:`1.5px solid ${d.open ? T.creamDk : T.redL}` }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:d.open ? 10 : 0 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{day}</div>
+                <button onClick={() => toggleDayOpen(day)}
+                  style={{ padding:"5px 14px", borderRadius:20, border:"none", background:d.open ? T.greenL : T.redL, color:d.open ? T.green : T.red, fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                  {d.open ? "✓ مفتوح" : "✕ مغلق"}
+                </button>
+              </div>
+              {d.open && (
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                  <div>
+                    <label style={{ fontSize:10, color:T.inkSoft, display:"block", marginBottom:3 }}>من</label>
+                    <select value={d.from} onChange={e => setDayTime(day, "from", e.target.value)}
+                      style={{ width:"100%", padding:"7px 8px", border:`1px solid ${T.creamDk}`, borderRadius:8, fontSize:12, fontFamily:"Tajawal,sans-serif", background:T.cream }}>
+                      {HOUR_TIMES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize:10, color:T.inkSoft, display:"block", marginBottom:3 }}>إلى</label>
+                    <select value={d.to} onChange={e => setDayTime(day, "to", e.target.value)}
+                      style={{ width:"100%", padding:"7px 8px", border:`1px solid ${T.creamDk}`, borderRadius:8, fontSize:12, fontFamily:"Tajawal,sans-serif", background:T.cream }}>
+                      {HOUR_TIMES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      <PBtn full disabled={saving} onClick={save}>{saving ? "...جارٍ الحفظ" : "💾 حفظ أوقات العمل"}</PBtn>
     </div>
   )
 }
