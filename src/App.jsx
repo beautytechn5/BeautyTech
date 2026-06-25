@@ -148,10 +148,18 @@ const SALONS = []
    💰 COMMISSION CALCULATOR — مركزي ودقيق
    خدمة/باقة/كوبون/عرض: عمولة 10% من الخدمة، تُخصم من العربون 30%
    إهداء محبة: عمولة 10% من المبلغ الكامل، للصالون 90%
+   حجز يدوي: عمولة 3% من المبلغ الكامل — مستحقة على الصالون (عكس الاتجاه)
 ══════════════════════════════════════════ */
 function calcCommission(booking) {
   const total = booking.total_amount || 0
   const isLoveGift = booking.booking_type === "love_gift"
+  const isManual = booking.booking_type === "manual"
+
+  if (isManual) {
+    // العميلة دفعت كاش للصالون مباشرة — المنصة تستحق 3% منه فقط
+    const fee = booking.platform_fee || Math.round(total * 0.03)
+    return { fee, salonGet: total - fee, label: "مستحق على الصالون 3%", depositPaid: 0, owedToPlatform: fee }
+  }
 
   if (isLoveGift) {
     // العميل دفع الكامل — عمولة 10% من الكامل
@@ -1943,34 +1951,204 @@ function OwnerDashboard({ setScreen }) {
 }
 
 
+/* ══════════════════════════════════════════
+   🖐️ MANUAL BOOKING MODAL — حجز يدوي بالاستقبال
+   عمولة 3% من قيمة الخدمة، يُحفظ كحجز "قائم" فوراً
+══════════════════════════════════════════ */
+function ManualBookingModal({ salonId, onClose, onCreated, toast }) {
+  const [services, setServices] = useState([])
+  const [loadingSvcs, setLoadingSvcs] = useState(true)
+  const [svc, setSvc] = useState(null)
+  const [date, setDate] = useState(() => new Date().toISOString().split("T")[0])
+  const [time, setTime] = useState("")
+  const [clientName, setClientName] = useState("")
+  const [clientPhone, setClientPhone] = useState("")
+  const [bookedTimes, setBookedTimes] = useState([])
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    const load = async () => {
+      const { data } = await supabase.from('services').select('*').eq('salon_id', salonId)
+      setServices((data || []).map(s => ({
+        id: s.id, name: s.name, price: s.price,
+        timeFrom: s.time_from || "09:00", timeTo: s.time_to || "18:00",
+      })))
+      setLoadingSvcs(false)
+    }
+    load()
+  }, [salonId])
+
+  // جلب الأوقات المحجوزة (يدوي + أونلاين) لهذا التاريخ — مشترك بين الكل
+  useEffect(() => {
+    if (!date || !salonId) return
+    supabase.from('bookings').select('appointment_time')
+      .eq('salon_id', salonId)
+      .eq('appointment_date', date)
+      .in('status', ['pending', 'confirmed', 'completed'])
+      .then(({ data }) => setBookedTimes((data || []).map(b => b.appointment_time)))
+  }, [date, salonId])
+
+  const getSvcTimes = () => {
+    if (!svc) return []
+    const fi = ALL_TIMES.indexOf(svc.timeFrom)
+    const ti = ALL_TIMES.indexOf(svc.timeTo)
+    if (fi < 0 || ti < 0) return ALL_TIMES
+    return ALL_TIMES.slice(fi, ti + 1)
+  }
+  const availableTimes = getSvcTimes().filter(t => !bookedTimes.includes(t))
+
+  const fee = svc ? Math.round(svc.price * 0.03) : 0
+  const salonNet = svc ? svc.price - fee : 0
+
+  const submit = async () => {
+    if (!svc || !date || !time || !clientName || !clientPhone) { toast("⚠ أكملي كل الحقول"); return }
+    setSaving(true)
+    const { error } = await supabase.from('bookings').insert([{
+      salon_id: salonId,
+      client_name: clientName,
+      client_phone: clientPhone,
+      appointment_date: date,
+      appointment_time: time,
+      service_name: svc.name,
+      total_amount: svc.price,
+      deposit_amount: 0,
+      platform_fee: fee,
+      salon_amount: salonNet,
+      status: "confirmed",          // قائم فوراً — العميلة حاضرة
+      booking_type: "manual",
+      payment_status: "pending",    // مستحق على الصالون تحويله لاحقاً
+    }])
+    setSaving(false)
+    if (error) { toast("⚠ حدث خطأ: " + error.message); return }
+    // رسالة واتساب للعميلة
+    const waNum = (clientPhone || "").replace(/^0/, "").replace(/[^0-9]/g, "")
+    if (waNum) {
+      const msg = encodeURIComponent(
+        `🌸 تم تأكيد حجزك عبر بيوتي تيك!\nالخدمة: ${svc.name}\nالوقت: ${time}\nالتاريخ: ${date}`
+      )
+      setTimeout(() => window.open(`https://wa.me/966${waNum}?text=${msg}`, "_blank"), 600)
+    }
+    toast("✅ تم تسجيل الحجز اليدوي بنجاح!")
+    onCreated()
+    onClose()
+  }
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:200, display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background:T.cream, borderRadius:"24px 24px 0 0", padding:"20px 18px", width:"100%", maxWidth:480, maxHeight:"88vh", overflowY:"auto" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+          <div style={{ fontSize:16, fontWeight:800, color:T.ink }}>🖐️ حجز يدوي — عميلة حاضرة بالصالون</div>
+          <button onClick={onClose} style={{ width:32, height:32, borderRadius:"50%", border:"none", background:T.white, cursor:"pointer", fontSize:14 }}>✕</button>
+        </div>
+
+        {loadingSvcs && <div style={{ textAlign:"center", padding:20, color:T.inkSoft }}>...جاري التحميل</div>}
+
+        {!loadingSvcs && (
+          <>
+            <label style={{ fontSize:12, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:6 }}>الخدمة *</label>
+            <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:14 }}>
+              {services.map(s => (
+                <button key={s.id} onClick={() => { setSvc(s); setTime("") }}
+                  style={{ display:"flex", justifyContent:"space-between", padding:"10px 12px", borderRadius:10, border:`1.5px solid ${svc?.id===s.id ? T.roseDp : T.creamDk}`, background:svc?.id===s.id ? T.roseL : T.white, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                  <span style={{ fontSize:13, fontWeight:700, color:T.ink }}>{s.name}</span>
+                  <span style={{ fontSize:13, fontWeight:800, color:T.gold }}>{s.price} ر.س</span>
+                </button>
+              ))}
+              {services.length === 0 && <div style={{ fontSize:12, color:T.inkSoft, textAlign:"center", padding:10 }}>أضيفي خدمات أولاً من تبويب الخدمات</div>}
+            </div>
+
+            <label style={{ fontSize:12, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:6 }}>التاريخ *</label>
+            <input type="date" value={date} onChange={e => { setDate(e.target.value); setTime("") }}
+              style={{ width:"100%", padding:"10px 12px", border:`1px solid ${T.creamDk}`, borderRadius:10, fontSize:13, fontFamily:"Tajawal,sans-serif", background:T.white, marginBottom:14 }} />
+
+            {svc && (
+              <>
+                <label style={{ fontSize:12, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:6 }}>الوقت المتاح *</label>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:6, marginBottom:14 }}>
+                  {availableTimes.map(t => (
+                    <button key={t} onClick={() => setTime(t)}
+                      style={{ padding:"8px 4px", borderRadius:8, border:`1.5px solid ${time===t ? T.roseDp : T.creamDk}`, background:time===t ? T.roseL : T.white, color:time===t ? T.roseDp : T.ink, fontSize:11, fontWeight:time===t?700:400, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                      {t}
+                    </button>
+                  ))}
+                  {availableTimes.length === 0 && <div style={{ gridColumn:"span 4", fontSize:12, color:T.red, textAlign:"center", padding:8 }}>لا توجد أوقات متاحة بهذا اليوم</div>}
+                </div>
+              </>
+            )}
+
+            <label style={{ fontSize:12, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:6 }}>اسم العميلة *</label>
+            <input value={clientName} onChange={e => setClientName(e.target.value)} placeholder="مثال: سارة الأحمد"
+              style={{ width:"100%", padding:"10px 12px", border:`1px solid ${T.creamDk}`, borderRadius:10, fontSize:13, fontFamily:"Tajawal,sans-serif", background:T.white, marginBottom:14 }} />
+
+            <label style={{ fontSize:12, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:6 }}>رقم جوالها *</label>
+            <input type="tel" value={clientPhone} onChange={e => setClientPhone(e.target.value)} placeholder="05xxxxxxxx"
+              style={{ width:"100%", padding:"10px 12px", border:`1px solid ${T.creamDk}`, borderRadius:10, fontSize:13, fontFamily:"Tajawal,sans-serif", background:T.white, marginBottom:16 }} />
+
+            {svc && (
+              <div style={{ background:T.white, borderRadius:12, padding:"12px 14px", marginBottom:16, border:`1.5px solid ${T.goldL}` }}>
+                <div style={{ fontSize:12, fontWeight:700, color:T.ink, marginBottom:8 }}>📋 ملخص الحجز</div>
+                {[
+                  ["المبلغ الكامل", svc.price + " ر.س", T.ink],
+                  ["عمولة المنصة (3%)", fee + " ر.س", "#C62828"],
+                  ["✅ صافي الصالون", salonNet + " ر.س", T.green],
+                ].map(r => (
+                  <div key={r[0]} style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"4px 0" }}>
+                    <span style={{ color:T.inkSoft }}>{r[0]}</span>
+                    <span style={{ fontWeight:700, color:r[2] }}>{r[1]}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <PBtn full disabled={!svc || !date || !time || !clientName || !clientPhone || saving} onClick={submit}>
+              {saving ? "...جارٍ الحجز" : "✅ تأكيد الحجز"}
+            </PBtn>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+
 function OwnerBookings() {
   const [bookings, setBookings] = useState([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState("active")
+  const [salonId, setSalonId] = useState(null)
+  const [showManual, setShowManual] = useState(false)
   const toast = useToast()
 
-  useEffect(() => {
-    const load = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
-      // جلب بيانات الصالون أولاً
-      const { data: salonData } = await supabase.from('salons').select('id').eq('email', session.user.email)
-      if (!salonData || salonData.length === 0) { setLoading(false); return }
-      const salonId = salonData[0].id
-      const { data } = await supabase.from('bookings')
-        .select('*')
-        .eq('salon_id', salonId)
-        .order('appointment_date', { ascending: true })
-      setBookings(data || [])
-      setLoading(false)
-    }
-    load()
-  }, [])
+  const load = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    // جلب بيانات الصالون أولاً
+    const { data: salonData } = await supabase.from('salons').select('id').eq('email', session.user.email)
+    if (!salonData || salonData.length === 0) { setLoading(false); return }
+    setSalonId(salonData[0].id)
+    const { data } = await supabase.from('bookings')
+      .select('*')
+      .eq('salon_id', salonData[0].id)
+      .order('appointment_date', { ascending: true })
+    setBookings(data || [])
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [])
 
   const updateStatus = async (id, status) => {
-    await supabase.from('bookings').update({ status }).eq('id', id)
-    setBookings(b => b.map(bk => bk.id === id ? { ...bk, status } : bk))
-    toast(status === "completed" ? "✅ تم تحديد الحجز كمكتمل" : "تم إلغاء الحجز")
+    const bk = bookings.find(b => b.id === id)
+    const isRefundable = status === "cancelled" && bk && bk.booking_type !== "manual" && bk.booking_type !== "love_gift" && (bk.deposit_amount || 0) > 0
+    await supabase.from('bookings').update({
+      status,
+      ...(isRefundable ? { refund_status: "pending", payment_status: "refund_due" } : {})
+    }).eq('id', id)
+    setBookings(b => b.map(bk2 => bk2.id === id ? { ...bk2, status, ...(isRefundable ? { refund_status: "pending", payment_status: "refund_due" } : {}) } : bk2))
+    if (isRefundable) {
+      toast("تم إلغاء الحجز — سيتم استرجاع العربون (" + (bk.deposit_amount||0) + " ر.س) للعميلة")
+    } else {
+      toast(status === "completed" ? "✅ تم تحديد الحجز كمكتمل" : "تم إلغاء الحجز")
+    }
   }
 
   const filtered = bookings.filter(b => {
@@ -1989,6 +2167,15 @@ function OwnerBookings() {
 
   return (
     <div>
+      <PBtn full onClick={() => setShowManual(true)} style={{ marginBottom:14 }}>
+        🖐️ تسجيل حجز يدوي (عميلة حاضرة بالصالون)
+      </PBtn>
+      {showManual && salonId && (
+        <ManualBookingModal salonId={salonId} toast={toast}
+          onClose={() => setShowManual(false)}
+          onCreated={load} />
+      )}
+
       <div style={{ display:"flex", background:T.white, borderRadius:12, overflow:"hidden", marginBottom:14, border:`1px solid ${T.creamDk}` }}>
         {[
           { id:"active",    label:"الفعّالة",  icon:"🟢", count: bookings.filter(b => b.status==="pending"||b.status==="confirmed").length },
@@ -2009,7 +2196,7 @@ function OwnerBookings() {
         {filtered.map(bk => {
           const st = STATUS[bk.status] || STATUS.pending
           return (
-            <Card key={bk.id} style={{ padding:14, border: bk.booking_type==="love_gift" ? "2px solid #F48FB1" : bk.booking_type==="voucher" ? `2px solid ${T.greenL}` : bk.booking_type==="offer" ? `2px solid ${T.roseL}` : bk.booking_type==="package" ? `2px solid ${T.goldL}` : "none" }}>
+            <Card key={bk.id} style={{ padding:14, border: bk.booking_type==="love_gift" ? "2px solid #F48FB1" : bk.booking_type==="manual" ? "2px solid #64B5F6" : bk.booking_type==="voucher" ? `2px solid ${T.greenL}` : bk.booking_type==="offer" ? `2px solid ${T.roseL}` : bk.booking_type==="package" ? `2px solid ${T.goldL}` : "none" }}>
               {/* شريط مميز لإهداء المحبة */}
               {bk.booking_type === "love_gift" && (
                 <div style={{ background:"linear-gradient(135deg,#F48FB1,#E91E63)", borderRadius:"10px 10px 0 0", margin:"-14px -14px 10px -14px", padding:"8px 14px", display:"flex", alignItems:"center", gap:8 }}>
@@ -2017,12 +2204,18 @@ function OwnerBookings() {
                   <span style={{ fontSize:12, fontWeight:800, color:"#fff" }}>إهداء محبة — المبلغ الكامل مدفوع مسبقاً</span>
                 </div>
               )}
+              {bk.booking_type === "manual" && (
+                <div style={{ background:"linear-gradient(135deg,#64B5F6,#1976D2)", borderRadius:"10px 10px 0 0", margin:"-14px -14px 10px -14px", padding:"8px 14px", display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:16 }}>🖐️</span>
+                  <span style={{ fontSize:12, fontWeight:800, color:"#fff" }}>حجز يدوي — عميلة حضرت بالصالون</span>
+                </div>
+              )}
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
                 <div style={{ fontSize:14, fontWeight:800, color:T.ink }}>{bk.client_name}</div>
                 <span style={{ background:st.bg, color:st.color, fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20 }}>{st.label}</span>
               </div>
               <div style={{ fontSize:12, color:T.inkSoft, marginBottom:4 }}>
-                {bk.booking_type === "offer" ? "🏷️ عرض خاص" : bk.booking_type === "package" ? "🎁 باقة" : bk.booking_type === "love_gift" ? "💝 إهداء محبة" : bk.booking_type === "voucher" ? "🎟️ قسيمة هدية" : "✂️ خدمة"} {bk.service_name && `· ${bk.service_name}`}
+                {bk.booking_type === "offer" ? "🏷️ عرض خاص" : bk.booking_type === "package" ? "🎁 باقة" : bk.booking_type === "love_gift" ? "💝 إهداء محبة" : bk.booking_type === "manual" ? "🖐️ حجز يدوي" : bk.booking_type === "voucher" ? "🎟️ قسيمة هدية" : "✂️ خدمة"} {bk.service_name && `· ${bk.service_name}`}
               </div>
               <div style={{ fontSize:11, color:T.inkMuted, marginBottom:2 }}>
                 🕐 تاريخ الحجز: {bk.created_at ? new Date(bk.created_at).toLocaleDateString('ar-SA') : "—"}
@@ -2034,12 +2227,20 @@ function OwnerBookings() {
                 {(() => {
                   const { fee, salonGet, depositPaid } = calcCommission(bk)
                   const isLove = bk.booking_type === "love_gift"
-                  return isLove ? (
+                  const isManual = bk.booking_type === "manual"
+                  if (isLove) return (
                     <>
                       <span style={{ color:T.inkSoft }}>المبلغ الكامل: <span style={{ color:"#E91E63", fontWeight:700 }}>{bk.total_amount} ر.س</span></span>
                       <span style={{ color:T.inkSoft }}>صافيك (90%): <span style={{ color:T.green, fontWeight:700 }}>{salonGet} ر.س</span></span>
                     </>
-                  ) : (
+                  )
+                  if (isManual) return (
+                    <>
+                      <span style={{ color:T.inkSoft }}>المبلغ المستلم كاش: <span style={{ color:"#1976D2", fontWeight:700 }}>{bk.total_amount} ر.س</span></span>
+                      <span style={{ color:T.inkSoft }}>عمولة المنصة (3%): <span style={{ color:"#C62828", fontWeight:700 }}>{fee} ر.س</span></span>
+                    </>
+                  )
+                  return (
                     <>
                       <span style={{ color:T.inkSoft }}>العربون: <span style={{ color:T.gold, fontWeight:700 }}>{depositPaid} ر.س</span></span>
                       <span style={{ color:T.inkSoft }}>صافيك: <span style={{ color:T.green, fontWeight:700 }}>{salonGet} ر.س</span></span>
@@ -4420,9 +4621,12 @@ function OwnerFinance({ toast }) {
     return true
   })
 
-  const pending  = filtered.filter(b => b.payment_status !== "settled")
-  const settled  = filtered.filter(b => b.payment_status === "settled")
+  const pending  = filtered.filter(b => b.payment_status !== "settled" && b.booking_type !== "manual")
+  const settled  = filtered.filter(b => b.payment_status === "settled" && b.booking_type !== "manual")
   const loveGifts = filtered.filter(b => b.booking_type === "love_gift")
+  const manualBks = filtered.filter(b => b.booking_type === "manual")
+  const manualPending = manualBks.filter(b => b.payment_status !== "settled")
+  const manualSettled = manualBks.filter(b => b.payment_status === "settled")
 
   // حسابات دقيقة
   // العربون الحجوزات العادية = deposit_amount - platform_fee
@@ -4433,10 +4637,13 @@ function OwnerFinance({ toast }) {
 
   const totalPending  = pending.reduce((s,b)  => s + calcNet(b), 0)
   const totalSettled  = settled.reduce((s,b)  => s + calcNet(b), 0)
-  const totalFees     = filtered.reduce((s,b) => s + (b.platform_fee || Math.round((b.total_amount||0)*0.10)), 0)
+  const totalFees     = filtered.filter(b => b.booking_type !== "manual").reduce((s,b) => s + calcCommission(b).fee, 0)
   const totalLoveGift = loveGifts.reduce((s,b) => s + calcNet(b), 0)
+  // مستحق على الصالون من الحجوزات اليدوية (عكس الاتجاه — هو يدفع لك)
+  const manualOwedPending = manualPending.reduce((s,b) => s + calcCommission(b).fee, 0)
+  const manualOwedSettled = manualSettled.reduce((s,b) => s + calcCommission(b).fee, 0)
 
-  const list = tab === "pending" ? pending : tab === "settled" ? settled : loveGifts
+  const list = tab === "pending" ? pending : tab === "settled" ? settled : tab === "manual" ? manualBks : loveGifts
 
   return (
     <div>
@@ -4460,6 +4667,10 @@ function OwnerFinance({ toast }) {
         <div style={{ background:T.white, borderRadius:14, padding:"14px", textAlign:"center", border:`1px solid ${T.creamDk}` }}>
           <div style={{ fontSize:20, fontWeight:900, color:"#C62828" }}>{totalFees.toLocaleString()}</div>
           <div style={{ fontSize:10, color:T.inkSoft, marginTop:3 }}>🏦 عمولة المنصة (10%)</div>
+        </div>
+        <div style={{ background:"linear-gradient(135deg,#1976D2,#0D47A1)", borderRadius:14, padding:"14px", textAlign:"center", gridColumn:"span 2" }}>
+          <div style={{ fontSize:20, fontWeight:900, color:T.white }}>{manualOwedPending.toLocaleString()} ر.س</div>
+          <div style={{ fontSize:10, color:"rgba(255,255,255,.85)", marginTop:3 }}>🖐️ مستحق عليك للمنصة من الحجوزات اليدوية (3%)</div>
         </div>
       </div>
 
@@ -4508,6 +4719,7 @@ function OwnerFinance({ toast }) {
           { id:"pending",   label:`⏳ معلق (${pending.length})` },
           { id:"settled",   label:`✅ محوَّل (${settled.length})` },
           { id:"love_gift", label:`💝 إهداء (${loveGifts.length})` },
+          { id:"manual",    label:`🖐️ يدوي (${manualBks.length})` },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             style={{ flex:1, padding:"10px 4px", border:"none", borderBottom:`3px solid ${tab===t.id ? T.roseDp : "transparent"}`, background:"transparent", cursor:"pointer", fontSize:11, fontWeight:tab===t.id ? 700 : 400, color:tab===t.id ? T.roseDp : T.inkSoft, fontFamily:"Tajawal,sans-serif" }}>
@@ -4522,14 +4734,15 @@ function OwnerFinance({ toast }) {
       <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
         {list.map(bk => {
           const isLove = bk.booking_type === "love_gift"
-          const fee = bk.platform_fee || Math.round((bk.total_amount||0)*0.10)
+          const isManual = bk.booking_type === "manual"
+          const { fee } = calcCommission(bk)
           const netAmount = calcNet(bk)
           return (
-            <div key={bk.id} style={{ background:T.white, borderRadius:14, padding:"14px 16px", border:`1.5px solid ${isLove ? "#F8BBD0" : bk.payment_status==="settled" ? "#E8F5E9" : T.roseL}` }}>
+            <div key={bk.id} style={{ background:T.white, borderRadius:14, padding:"14px 16px", border:`1.5px solid ${isLove ? "#F8BBD0" : isManual ? "#90CAF9" : bk.payment_status==="settled" ? "#E8F5E9" : T.roseL}` }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
                 <div>
                   <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                    <span style={{ fontSize:14 }}>{isLove ? "💝" : "✂️"}</span>
+                    <span style={{ fontSize:14 }}>{isLove ? "💝" : isManual ? "🖐️" : "✂️"}</span>
                     <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{bk.client_name}</div>
                   </div>
                   <div style={{ fontSize:11, color:T.inkSoft, marginTop:2 }}>
@@ -4537,13 +4750,26 @@ function OwnerFinance({ toast }) {
                   </div>
                   {bk.service_name && <div style={{ fontSize:11, color:T.roseDp, marginTop:2 }}>{bk.service_name}</div>}
                 </div>
-                <span style={{ background:bk.payment_status==="settled" ? "#E8F5E9" : T.roseL, color:bk.payment_status==="settled" ? T.green : T.roseDp, fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20 }}>
-                  {bk.payment_status === "settled" ? "✅ محوَّل" : "⏳ معلق"}
+                <span style={{ background:bk.payment_status==="settled" ? "#E8F5E9" : isManual ? "#E3F2FD" : T.roseL, color:bk.payment_status==="settled" ? T.green : isManual ? "#1976D2" : T.roseDp, fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20 }}>
+                  {bk.payment_status === "settled" ? "✅ محوَّل" : isManual ? "⏳ مستحق عليك" : "⏳ معلق"}
                 </span>
               </div>
 
               <div style={{ background:T.cream, borderRadius:10, padding:"10px 12px" }}>
-                {isLove ? (
+                {isManual ? (
+                  // حجز يدوي — المنصة تستحق 3% فقط
+                  <>
+                    {[
+                      ["🖐️ المبلغ المستلم كاش", (bk.total_amount||0).toLocaleString() + " ر.س", T.ink],
+                      ["مستحق للمنصة (3%)", fee.toLocaleString() + " ر.س", "#1976D2"],
+                    ].map(r => (
+                      <div key={r[0]} style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"4px 0", borderBottom:`1px solid ${T.creamDk}` }}>
+                        <span style={{ color:T.inkSoft }}>{r[0]}</span>
+                        <span style={{ fontWeight:700, color:r[2] }}>{r[1]}</span>
+                      </div>
+                    ))}
+                  </>
+                ) : isLove ? (
                   // إهداء المحبة — المبلغ الكامل
                   <>
                     {[
@@ -4577,12 +4803,12 @@ function OwnerFinance({ toast }) {
 
               {bk.payment_status === "settled" && bk.settled_at && (
                 <div style={{ fontSize:10, color:T.green, marginTop:6 }}>
-                  ✅ تم التحويل: {new Date(bk.settled_at).toLocaleDateString("ar-SA")}
+                  ✅ {isManual ? "تم تحويل العمولة للمنصة" : "تم التحويل"}: {new Date(bk.settled_at).toLocaleDateString("ar-SA")}
                 </div>
               )}
               {bk.payment_status !== "settled" && (
                 <div style={{ fontSize:10, color:T.inkSoft, marginTop:6 }}>
-                  ⏳ في انتظار التحويل اليومي
+                  {isManual ? "⏳ مستحق عليك تحويله للمنصة" : "⏳ في انتظار التحويل اليومي"}
                 </div>
               )}
             </div>
@@ -6756,6 +6982,17 @@ function Navbar({ screen, setScreen }) {
 export default function App() {
   const [splash, setSplash] = useState(true)
   const [screen, setScreen] = useState("client-home")
+
+  // تحديث الكاش عند أول تحميل
+  useEffect(() => {
+    const v = "v" + "20260618"
+    if (localStorage.getItem("app_version") !== v) {
+      localStorage.setItem("app_version", v)
+      if ("caches" in window) {
+        caches.keys().then(keys => keys.forEach(k => caches.delete(k)))
+      }
+    }
+  }, [])
   const [salon, setSalon] = useState(null)
   const [payData, setPayData] = useState(null)
   const [user, setUser] = useState(null)
