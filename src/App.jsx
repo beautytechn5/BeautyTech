@@ -550,6 +550,12 @@ function ClientHome({ setScreen, setSalon }) {
             🎛 فلترة {activeFilters > 0 && <span style={{ background:T.roseDp, color:T.white, borderRadius:"50%", width:16, height:16, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10 }}>{activeFilters}</span>}
           </button>
 
+          {/* مقارنة الصالونات */}
+          <button onClick={() => setScreen("compare")}
+            style={{ padding:"8px 16px", borderRadius:50, border:`1.5px solid ${T.creamDk}`, background:T.white, color:T.inkSoft, fontSize:12, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap", fontFamily:"Tajawal,sans-serif", transition:"all .2s", display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
+            ⚖️ مقارنة
+          </button>
+
           {/* ترتيب */}
           {[
             { id:"recommended", label:"الأنسب", icon:"✦" },
@@ -1175,14 +1181,15 @@ function BookingPage({ salon, setScreen }) {
   const TIMES = getSvcTimes().filter(t => !bookedTimes.includes(t))
 
   // جلب الأوقات المحجوزة فعلياً (يدوي + أونلاين) لهذا الصالون والتاريخ — لمنع تكرار الحجز
-  useEffect(() => {
+  const refreshBookedTimes = () => {
     if (!date || !salon?.id) { setBookedTimes([]); return }
     supabase.from('bookings').select('appointment_time')
       .eq('salon_id', salon.id)
       .eq('appointment_date', date)
       .in('status', ['pending', 'confirmed', 'completed'])
       .then(({ data }) => setBookedTimes((data || []).map(b => b.appointment_time)))
-  }, [date, salon?.id])
+  }
+  useEffect(refreshBookedTimes, [date, salon?.id])
 
   if (!salon) return null
 
@@ -1198,13 +1205,23 @@ function BookingPage({ salon, setScreen }) {
       total_amount: svc ? svc.p : 0,
       deposit_amount: deposit,
       status: 'pending',
+      payment_status: 'pending',
       user_id: session?.user?.id || null,
       service_name: svc ? svc.n : "",
       booking_type: svc?.isOffer ? (svc.offerType || "offer") : "service",
       platform_fee: platformFee,
       salon_amount: salonAmount,
     }])
-    if (error) { toast("⚠ حدث خطأ: " + error.message); return }
+    if (error) {
+      if (error.message?.includes("duplicate key") || error.code === "23505") {
+        toast("⚠ تم حجز هذا الوقت للتو من عميلة أخرى — يرجى اختيار وقت آخر")
+        setTime("")
+        refreshBookedTimes()
+      } else {
+        toast("⚠ حدث خطأ: " + error.message)
+      }
+      return
+    }
 
     // رسالة تأكيد جاهزة للعميلة نفسها — تفتح واتسابها مباشرة لحفظ الموعد
     const myWaNum = (phone || "").replace(/^0/, "").replace(/[^0-9]/g, "")
@@ -1384,9 +1401,18 @@ function ClientRegister({ setScreen }) {
       password: form.pass,
       options: { data: { role: "client", name: form.name } }
     })
-    if (authError) { setLoading(false); toast("⚠ " + authError.message); return }
-    await supabase.from('clients').insert([{ full_name: form.name, phone: form.phone, email: form.email }])
+    if (authError) {
+      setLoading(false)
+      if (authError.message?.includes("already registered") || authError.message?.includes("already exists")) {
+        toast("⚠ هذا البريد الإلكتروني مسجَّل مسبقاً — جرّبي تسجيل الدخول")
+      } else {
+        toast("⚠ " + authError.message)
+      }
+      return
+    }
+    const { error: clientErr } = await supabase.from('clients').insert([{ full_name: form.name, phone: form.phone, email: form.email }])
     setLoading(false)
+    if (clientErr) console.error("clients directory insert failed:", clientErr.message)
     toast("✅ مرحباً بكِ! تم إنشاء حسابك 🌸")
     setScreen("client-home")
   }
@@ -1668,7 +1694,15 @@ function OwnerRegister({ setScreen }) {
       password: form.pass,
       options: { data: { role: "owner", name: form.owner } }
     })
-    if (authError) { setLoading(false); toast("⚠ " + authError.message); return }
+    if (authError) {
+      setLoading(false)
+      if (authError.message?.includes("already registered") || authError.message?.includes("already exists")) {
+        toast("⚠ هذا البريد الإلكتروني مسجَّل مسبقاً — جرّبي تسجيل الدخول")
+      } else {
+        toast("⚠ " + authError.message)
+      }
+      return
+    }
     // حفظ بيانات الصالون
     const trialEnd = new Date()
     trialEnd.setDate(trialEnd.getDate() + 14)
@@ -1698,7 +1732,7 @@ function OwnerRegister({ setScreen }) {
     const valid = services.filter(s => s.name && s.price)
     if (valid.length > 0 && salonId) {
       setSavingServices(true)
-      await supabase.from('services').insert(valid.map(s => ({
+      const { error } = await supabase.from('services').insert(valid.map(s => ({
         salon_id: salonId,
         name: s.name,
         price: Number(s.price),
@@ -1708,6 +1742,9 @@ function OwnerRegister({ setScreen }) {
         time_to: "18:00",
       })))
       setSavingServices(false)
+      if (error) {
+        toast("⚠ تعذّر حفظ الخدمات: " + error.message + " — يمكنك إضافتها لاحقاً من لوحة التحكم")
+      }
     }
     setStep(4)
   }
@@ -2188,14 +2225,15 @@ function ManualBookingModal({ salonId, onClose, onCreated, toast }) {
   }, [salonId])
 
   // جلب الأوقات المحجوزة (يدوي + أونلاين) لهذا التاريخ — مشترك بين الكل
-  useEffect(() => {
+  const refreshBookedTimes = () => {
     if (!date || !salonId) return
     supabase.from('bookings').select('appointment_time')
       .eq('salon_id', salonId)
       .eq('appointment_date', date)
       .in('status', ['pending', 'confirmed', 'completed'])
       .then(({ data }) => setBookedTimes((data || []).map(b => b.appointment_time)))
-  }, [date, salonId])
+  }
+  useEffect(refreshBookedTimes, [date, salonId])
 
   const getSvcTimes = () => {
     if (!svc) return []
@@ -2231,7 +2269,16 @@ function ManualBookingModal({ salonId, onClose, onCreated, toast }) {
       payment_status: "pending",    // مستحق على الصالون تحويله لاحقاً
     }])
     setSaving(false)
-    if (error) { toast("⚠ حدث خطأ: " + error.message); return }
+    if (error) {
+      if (error.message?.includes("duplicate key") || error.code === "23505") {
+        toast("⚠ هذا الوقت محجوز بالفعل — اختاري وقتاً آخر")
+        setTime("")
+        refreshBookedTimes()
+      } else {
+        toast("⚠ حدث خطأ: " + error.message)
+      }
+      return
+    }
     // رسالة واتساب للعميلة
     const waNum = (clientPhone || "").replace(/^0/, "").replace(/[^0-9]/g, "")
     if (waNum) {
@@ -2371,7 +2418,8 @@ function OwnerLoveGifts({ toast }) {
   }, [])
 
   const updateStatus = async (id, status) => {
-    await supabase.from('bookings').update({ status }).eq('id', id)
+    const { error } = await supabase.from('bookings').update({ status }).eq('id', id)
+    if (error) { toast("⚠ تعذّر تحديث الحجز: " + error.message); return }
     setBookings(b => b.map(bk => bk.id === id ? { ...bk, status } : bk))
     toast(status === "completed" ? "✅ تم تحديد الحجز كمكتمل" : "تم إلغاء الحجز")
   }
@@ -2469,10 +2517,11 @@ function OwnerBookings() {
   const updateStatus = async (id, status) => {
     const bk = bookings.find(b => b.id === id)
     const isRefundable = status === "cancelled" && bk && bk.booking_type !== "manual" && bk.booking_type !== "love_gift" && (bk.deposit_amount || 0) > 0
-    await supabase.from('bookings').update({
+    const { error } = await supabase.from('bookings').update({
       status,
       ...(isRefundable ? { refund_status: "pending", payment_status: "refund_due" } : {})
     }).eq('id', id)
+    if (error) { toast("⚠ تعذّر تحديث الحجز: " + error.message); return }
     setBookings(b => b.map(bk2 => bk2.id === id ? { ...bk2, status, ...(isRefundable ? { refund_status: "pending", payment_status: "refund_due" } : {}) } : bk2))
     if (isRefundable) {
       toast("تم إلغاء الحجز — سيتم استرجاع العربون (" + (bk.deposit_amount||0) + " ر.س) للعميلة")
@@ -3636,7 +3685,8 @@ function OwnerServices({ toast }) {
   }
 
   const deleteService = async (id) => {
-    await supabase.from('services').delete().eq('id', id)
+    const { error } = await supabase.from('services').delete().eq('id', id)
+    if (error) { toast("⚠ تعذّر حذف الخدمة: " + error.message); return }
     setServices(s => s.filter(sv => sv.id !== id))
     toast("🗑 تم حذف الخدمة")
   }
@@ -3920,13 +3970,15 @@ function OwnerOffers({ toast, type = "offer" }) {
   }
 
   const deleteOffer = async (id) => {
-    await supabase.from('offers').delete().eq('id', id)
+    const { error } = await supabase.from('offers').delete().eq('id', id)
+    if (error) { toast("⚠ تعذّر الحذف: " + error.message); return }
     setOffers(o => o.filter(x => x.id !== id))
     toast("🗑 تم الحذف")
   }
 
   const toggleOffer = async (id, active) => {
-    await supabase.from('offers').update({ active: !active }).eq('id', id)
+    const { error } = await supabase.from('offers').update({ active: !active }).eq('id', id)
+    if (error) { toast("⚠ حدث خطأ: " + error.message); return }
     setOffers(o => o.map(x => x.id === id ? { ...x, active:!active } : x))
   }
 
@@ -4303,16 +4355,18 @@ function OwnerStaff({ toast }) {
   const saveStaff = async () => {
     if (!form.name) { toast("⚠ أدخلي اسم الموظفة"); return }
     setSaving(true)
-    const { data } = await supabase.from("staff").insert([{ salon_id: salonId, ...form, active:true }]).select()
+    const { data, error } = await supabase.from("staff").insert([{ salon_id: salonId, ...form, active:true }]).select()
+    setSaving(false)
+    if (error) { toast("⚠ تعذّر إضافة الموظفة: " + error.message); return }
     if (data?.[0]) setStaff(s => [...s, data[0]])
     setForm({ name:"", phone:"", specialty:"", days:[], time_from:"09:00", time_to:"18:00" })
     setShowAdd(false)
-    setSaving(false)
     toast("✅ تمت إضافة الموظفة!")
   }
 
   const deleteStaff = async (id) => {
-    await supabase.from("staff").delete().eq("id", id)
+    const { error } = await supabase.from("staff").delete().eq("id", id)
+    if (error) { toast("⚠ تعذّر الحذف: " + error.message); return }
     setStaff(s => s.filter(x => x.id !== id))
     toast("🗑 تم الحذف")
   }
@@ -4570,28 +4624,33 @@ function OwnerCoupons({ toast }) {
     if (!form.code || !form.discount_value) { toast("⚠ أدخلي الكود والخصم"); return }
     setSaving(true)
     if (editId) {
-      await supabase.from("coupons").update({ ...form, discount_value: Number(form.discount_value), min_amount: Number(form.min_amount)||0, max_uses: Number(form.max_uses)||null }).eq("id", editId)
+      const { error } = await supabase.from("coupons").update({ ...form, discount_value: Number(form.discount_value), min_amount: Number(form.min_amount)||0, max_uses: Number(form.max_uses)||null }).eq("id", editId)
+      setSaving(false)
+      if (error) { toast("⚠ تعذّر التعديل: " + error.message); return }
       setCoupons(c => c.map(x => x.id === editId ? { ...x, ...form } : x))
       toast("✅ تم تعديل الكوبون!")
       setEditId(null)
     } else {
-      const { data } = await supabase.from("coupons").insert([{ salon_id: salonId, ...form, discount_value: Number(form.discount_value), min_amount: Number(form.min_amount)||0, max_uses: Number(form.max_uses)||null, used_count: 0 }]).select()
+      const { data, error } = await supabase.from("coupons").insert([{ salon_id: salonId, ...form, discount_value: Number(form.discount_value), min_amount: Number(form.min_amount)||0, max_uses: Number(form.max_uses)||null, used_count: 0 }]).select()
+      setSaving(false)
+      if (error) { toast("⚠ تعذّر إنشاء الكوبون: " + error.message); return }
       if (data?.[0]) setCoupons(c => [data[0], ...c])
       toast("✅ تم إنشاء الكوبون!")
     }
-    setSaving(false)
     setShowAdd(false)
     setForm({ code:"", discount_type:"percent", discount_value:"", min_amount:"", max_uses:"", valid_until:"", active:true })
   }
 
   const deleteCoupon = async (id) => {
-    await supabase.from("coupons").delete().eq("id", id)
+    const { error } = await supabase.from("coupons").delete().eq("id", id)
+    if (error) { toast("⚠ تعذّر الحذف: " + error.message); return }
     setCoupons(c => c.filter(x => x.id !== id))
     toast("🗑 تم حذف الكوبون")
   }
 
   const toggleCoupon = async (id, active) => {
-    await supabase.from("coupons").update({ active: !active }).eq("id", id)
+    const { error } = await supabase.from("coupons").update({ active: !active }).eq("id", id)
+    if (error) { toast("⚠ حدث خطأ: " + error.message); return }
     setCoupons(c => c.map(x => x.id === id ? { ...x, active: !active } : x))
   }
 
@@ -5479,7 +5538,8 @@ function OwnerSettings({ toast }) {
             <div style={{ aspectRatio:"1", borderRadius:10, overflow:"hidden", position:"relative" }}>
               <img src={form.imageUrl} alt="صورة الصالون" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
               <button onClick={async () => {
-                await supabase.from('salons').update({ image_url: null }).eq('id', salonId)
+                const { error } = await supabase.from('salons').update({ image_url: null }).eq('id', salonId)
+                if (error) { toast("⚠ تعذّر حذف الصورة: " + error.message); return }
                 setForm(f => ({ ...f, imageUrl:"" }))
                 toast("🗑 تم حذف الصورة")
               }} style={{ position:"absolute", top:4, left:4, width:22, height:22, borderRadius:"50%", background:T.red, border:"none", color:"#fff", fontSize:11, cursor:"pointer" }}>✕</button>
@@ -5499,8 +5559,9 @@ function OwnerSettings({ toast }) {
               const { data: urlData } = supabase.storage.from('salon-images').getPublicUrl(path)
               const url = urlData.publicUrl
               setForm(f => ({ ...f, imageUrl: url }))
-              await supabase.from('salons').update({ image_url: url }).eq('id', salonId)
+              const { error: updateErr } = await supabase.from('salons').update({ image_url: url }).eq('id', salonId)
               setUploading(false)
+              if (updateErr) { toast("⚠ رُفعت الصورة لكن تعذّر حفظها: " + updateErr.message); return }
               toast("✅ تم رفع الصورة!")
             }} />
           </label>
@@ -5990,6 +6051,7 @@ function GiftPage({ setScreen, salon, setSalon }) {
   const [agreed, setAgreed] = useState(false)
   const [focusF, setFocusF] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [bookedTimes, setBookedTimes] = useState([])
 
   const filteredSalons = salons.filter(s =>
     !q || s.name.includes(q) || (s.city || "").includes(q)
@@ -6008,6 +6070,18 @@ function GiftPage({ setScreen, salon, setSalon }) {
   const salonNet = totalAmount - platformFee            // 90% للصالون
 
   const ALL_TIMES_GIFT = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30"]
+
+  // جلب الأوقات المحجوزة فعلياً لهذا الصالون والتاريخ — مشتركة مع الأونلاين واليدوي
+  const refreshBookedTimes = () => {
+    if (!date || !salon?.id) { setBookedTimes([]); return }
+    supabase.from('bookings').select('appointment_time')
+      .eq('salon_id', salon.id)
+      .eq('appointment_date', date)
+      .in('status', ['pending', 'confirmed', 'completed'])
+      .then(({ data }) => setBookedTimes((data || []).map(b => b.appointment_time)))
+  }
+  useEffect(refreshBookedTimes, [date, salon?.id])
+  const availableTimesGift = ALL_TIMES_GIFT.filter(t => !bookedTimes.includes(t))
 
   const inp = (k) => ({
     width:"100%", padding:"12px 14px",
@@ -6039,7 +6113,16 @@ function GiftPage({ setScreen, salon, setSalon }) {
       payment_status: 'pending',
     }])
     setSaving(false)
-    if (error) { toast("⚠ حدث خطأ: " + error.message); return }
+    if (error) {
+      if (error.message?.includes("duplicate key") || error.code === "23505") {
+        toast("⚠ تم حجز هذا الوقت للتو — يرجى اختيار وقت آخر")
+        setTime("")
+        refreshBookedTimes()
+      } else {
+        toast("⚠ حدث خطأ: " + error.message)
+      }
+      return
+    }
     // رسالة واتساب للصالون
     if (salon?.wa) {
       const waNum = (salon.wa).replace(/^0/, "").replace(/[^0-9]/g, "")
@@ -6174,14 +6257,17 @@ function GiftPage({ setScreen, salon, setSalon }) {
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
               <div>
                 <label style={{ fontSize:13, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:7 }}>التاريخ <span style={{ color:T.rose }}>*</span></label>
-                <input type="date" value={date} onChange={e => setDate(e.target.value)} style={inp("dt")} onFocus={() => setFocusF("dt")} onBlur={() => setFocusF(null)} />
+                <input type="date" value={date} onChange={e => { setDate(e.target.value); setTime("") }} style={inp("dt")} onFocus={() => setFocusF("dt")} onBlur={() => setFocusF(null)} />
               </div>
               <div>
                 <label style={{ fontSize:13, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:7 }}>الوقت <span style={{ color:T.rose }}>*</span></label>
                 <select value={time} onChange={e => setTime(e.target.value)} style={inp("tm")} onFocus={() => setFocusF("tm")} onBlur={() => setFocusF(null)}>
                   <option value="">اختاري</option>
-                  {ALL_TIMES_GIFT.map(t => <option key={t} value={t}>{t}</option>)}
+                  {availableTimesGift.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
+                {date && availableTimesGift.length === 0 && (
+                  <div style={{ fontSize:11, color:T.red, marginTop:6 }}>لا توجد أوقات متاحة بهذا اليوم — جرّبي تاريخاً آخر</div>
+                )}
               </div>
             </div>
 
@@ -6221,7 +6307,8 @@ function RatingWidget({ bookingId, onRate }) {
 
   const save = async () => {
     if (!selected) { toast("⚠ اختاري تقييماً"); return }
-    await supabase.from('bookings').update({ rating: selected }).eq('id', bookingId)
+    const { error } = await supabase.from('bookings').update({ rating: selected }).eq('id', bookingId)
+    if (error) { toast("⚠ تعذّر حفظ التقييم: " + error.message); return }
     setSaved(true)
     onRate(selected)
     toast("✅ شكراً على تقييمك!")
@@ -6285,13 +6372,17 @@ function ClientProfile({ setScreen }) {
   const save = async () => {
     setSaving(true)
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return
+    if (!session) { setSaving(false); return }
+    let saveError = null
     if (clientId) {
-      await supabase.from('clients').update({ full_name:form.name, phone:form.phone, city:form.city }).eq('id', clientId)
+      const { error } = await supabase.from('clients').update({ full_name:form.name, phone:form.phone, city:form.city }).eq('id', clientId)
+      saveError = error
     } else {
-      await supabase.from('clients').insert([{ full_name:form.name, phone:form.phone, email:form.email, city:form.city }])
+      const { error } = await supabase.from('clients').insert([{ full_name:form.name, phone:form.phone, email:form.email, city:form.city }])
+      saveError = error
     }
     setSaving(false)
+    if (saveError) { toast("⚠ تعذّر حفظ بياناتك: " + saveError.message); return }
     toast("✅ تم حفظ بياناتك!")
   }
 
@@ -6395,7 +6486,8 @@ function MyBookingsPage({ setScreen, setSalon }) {
   }, [])
 
   const cancelBooking = async (id) => {
-    await supabase.from('bookings').update({ status:'cancelled' }).eq('id', id)
+    const { error } = await supabase.from('bookings').update({ status:'cancelled' }).eq('id', id)
+    if (error) { toast("⚠ تعذّر إلغاء الحجز: " + error.message); return }
     setBookings(b => b.map(bk => bk.id === id ? { ...bk, status:'cancelled' } : bk))
     toast("تم إلغاء الحجز")
   }
@@ -6540,14 +6632,18 @@ function ManualDepositEntry({ bookings, onUpdate, toast }) {
 
   const save = async () => {
     if (!selected || !amount) { toast("⚠ اختر حجزاً وأدخل المبلغ"); return }
-    setSaving(true)
     const bk = allBookings.find(b => b.id === selected)
-    if (!bk) { setSaving(false); return }
+    if (!bk) { return }
     const deposit = Number(amount)
     const platformFee = Math.round((bk.total_amount||0) * 0.10)
     const salonNet = deposit - platformFee
+    if (salonNet < 0) {
+      toast("⚠ العربون المُدخل (" + deposit + " ر.س) أقل من عمولة المنصة (" + platformFee + " ر.س) — تحقق من المبلغ")
+      return
+    }
+    setSaving(true)
 
-    await supabase.from("bookings").update({
+    const { error } = await supabase.from("bookings").update({
       deposit_amount: deposit,
       platform_fee: platformFee,
       salon_net_amount: salonNet,
@@ -6555,6 +6651,7 @@ function ManualDepositEntry({ bookings, onUpdate, toast }) {
     }).eq("id", selected)
 
     setSaving(false)
+    if (error) { toast("⚠ فشل حفظ العربون: " + error.message); return }
     setSelected("")
     setAmount("")
     toast("✅ تم تسجيل العربون!")
@@ -6920,11 +7017,16 @@ function AdminSettlement() {
     setSettling(true)
     const today = new Date().toISOString().split("T")[0]
     const pendingIds = bookings.filter(b => b.payment_status !== "settled").map(b => b.id)
-    // تحديث حالة الحجوزات
-    await supabase.from("bookings")
+    // تحديث حالة الحجوزات — هذي أهم عملية بالتسوية، لازم نتأكد إنها نجحت فعلاً
+    const { error: updateError } = await supabase.from("bookings")
       .update({ payment_status: "settled", settled_at: new Date().toISOString() })
       .in("id", pendingIds)
-    // حفظ سجل التسوية
+    if (updateError) {
+      setSettling(false)
+      toast("⚠ فشلت التسوية! لم يتم تحديث أي حجز: " + updateError.message)
+      return
+    }
+    // حفظ سجل التسوية (للأرشفة والمرجعية)
     const settlementRecord = {
       date: today,
       salons_count: pendingSalons.length,
@@ -6940,13 +7042,13 @@ function AdminSettlement() {
         has_love_gifts: s.loveGiftAmount > 0,
       }))
     }
-    try {
-      await supabase.from("settlement_history").insert([settlementRecord])
-    } catch(e) {
-      // الجدول قد لا يكون موجوداً بعد
-    }
-    toast("✅ تمت التسوية! حُوِّل " + totalNet.toLocaleString() + " ر.س لـ " + pendingSalons.length + " صالون")
+    const { error: historyError } = await supabase.from("settlement_history").insert([settlementRecord])
     setSettling(false)
+    if (historyError) {
+      toast("✅ تمت التسوية، لكن تعذّر حفظها بالسجل التاريخي: " + historyError.message)
+    } else {
+      toast("✅ تمت التسوية! حُوِّل " + totalNet.toLocaleString() + " ر.س لـ " + pendingSalons.length + " صالون")
+    }
     loadData()
     loadHistory()
   }
@@ -7773,7 +7875,7 @@ export default function App() {
     if (screen === "gift")             return <GiftPage        setScreen={go} salon={salon} setSalon={setSalon} />
     if (screen === "my-bookings")      return <MyBookingsPage  setScreen={go} setSalon={setSalon} />
     if (screen === "profile")           return <ClientProfile   setScreen={go} />
-    return <ClientHome setScreen={go} setSalon={setSalon} />
+    return <NotFoundPage setScreen={go} />
   }
 
   return (
