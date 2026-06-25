@@ -1205,6 +1205,21 @@ function BookingPage({ salon, setScreen }) {
       salon_amount: salonAmount,
     }])
     if (error) { toast("⚠ حدث خطأ: " + error.message); return }
+
+    // رسالة تأكيد جاهزة للعميلة نفسها — تفتح واتسابها مباشرة لحفظ الموعد
+    const myWaNum = (phone || "").replace(/^0/, "").replace(/[^0-9]/g, "")
+    if (myWaNum) {
+      const myMsgText = "🌸 تأكيد حجزك في " + salon.name + "\n\n" +
+        "الخدمة: " + (svc?.n || "") + "\n" +
+        "التاريخ: " + date + "\n" +
+        "الوقت: " + time + "\n" +
+        "المبلغ الكامل: " + (svc?.p || 0) + " ر.س\n" +
+        "العربون المدفوع: " + deposit + " ر.س\n\n" +
+        "احفظي هذه الرسالة كتذكير لموعدك ✨"
+      const myMsg = encodeURIComponent(myMsgText)
+      window.open(`https://wa.me/${myWaNum.startsWith("966") ? myWaNum : "966"+myWaNum}?text=${myMsg}`, "_blank")
+    }
+
     // إشعار واتساب للصالون
     if (salon?.wa) {
       const waNum = (salon.wa).replace(/^0/, "").replace(/[^0-9]/g,"")
@@ -1217,9 +1232,9 @@ function BookingPage({ salon, setScreen }) {
         "المبلغ: " + (svc?.p || 0) + " ر.س\n" +
         "العربون: " + deposit + " ر.س"
       const msg = encodeURIComponent(msgText)
-      setTimeout(() => window.open(`https://wa.me/966${waNum}?text=${msg}`, "_blank"), 1000)
+      setTimeout(() => window.open(`https://wa.me/966${waNum}?text=${msg}`, "_blank"), 1200)
     }
-    toast("✅ تم الحجز! سيصلكِ تأكيد على واتساب")
+    toast("✅ تم الحجز! تأكيدك جاهز على واتساب")
     setTimeout(() => setScreen("client-home"), 1500)
   }
 
@@ -6359,7 +6374,7 @@ function ClientProfile({ setScreen }) {
 /* ══════════════════════════════════════════
    📅 MY BOOKINGS PAGE — للعميلة
 ══════════════════════════════════════════ */
-function MyBookingsPage({ setScreen }) {
+function MyBookingsPage({ setScreen, setSalon }) {
   const [bookings, setBookings] = useState([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState("active") // active | done | cancelled
@@ -6383,6 +6398,22 @@ function MyBookingsPage({ setScreen }) {
     await supabase.from('bookings').update({ status:'cancelled' }).eq('id', id)
     setBookings(b => b.map(bk => bk.id === id ? { ...bk, status:'cancelled' } : bk))
     toast("تم إلغاء الحجز")
+  }
+
+  // إعادة حجز نفس الموعد بسهولة — تجلب بيانات الصالون وخدماته الفعلية وتفتح صفحة الحجز
+  const rebook = async (bk) => {
+    const { data: salonRows } = await supabase.from('salons').select('*').eq('id', bk.salon_id)
+    if (!salonRows?.[0]) { toast("⚠ تعذّر الوصول لبيانات الصالون"); return }
+    const s = salonRows[0]
+    const { data: svcRows } = await supabase.from('services').select('*').eq('salon_id', bk.salon_id).eq('active', true)
+    const services = (svcRows || []).map(sv => ({ n: sv.name, p: sv.price, dur: sv.duration, timeFrom: sv.time_from, timeTo: sv.time_to, days: sv.days }))
+    setSalon({
+      id: s.id,
+      name: s.name,
+      wa: s.phone || "0500000000",
+      services: services.length ? services : [{ n: bk.service_name, p: bk.total_amount, dur:60 }],
+    })
+    setScreen("booking")
   }
 
   const filtered = bookings.filter(b => {
@@ -6466,6 +6497,12 @@ function MyBookingsPage({ setScreen }) {
                   <button onClick={() => cancelBooking(bk.id)}
                     style={{ width:"100%", padding:"9px", borderRadius:10, border:`1px solid ${T.redL}`, background:T.white, color:T.red, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
                     إلغاء الحجز
+                  </button>
+                )}
+                {bk.status === "completed" && (
+                  <button onClick={() => rebook(bk)}
+                    style={{ width:"100%", padding:"9px", borderRadius:10, border:"none", background:`linear-gradient(135deg,${T.roseDp},${T.rose})`, color:T.white, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif", marginBottom:8 }}>
+                    🔄 احجزي نفس الموعد تاني
                   </button>
                 )}
                 {bk.status === "completed" && !bk.rating && (
@@ -6816,9 +6853,19 @@ function AdminSettlement() {
           loveGiftAmount: 0,
           loveGiftFee: 0,
           loveGiftNet: 0,
+          // مديونية الحجز اليدوي — مستحقة من الصالون للمنصة (عكس الاتجاه)
+          manualOwedTotal: 0,
+          manualOwedPending: 0,
+          manualBookingsCount: 0,
         }
       }
       const { fee, salonGet } = calcCommission(b)
+      if (b.booking_type === "manual") {
+        summary[sid].manualOwedTotal += fee
+        summary[sid].manualBookingsCount++
+        if (b.payment_status !== "settled") summary[sid].manualOwedPending += fee
+        return // لا تُحسب ضمن netAmount العادي — اتجاه معكوس
+      }
       summary[sid].totalSales += b.total_amount || 0
       summary[sid].platformFee += fee
       summary[sid].netAmount += salonGet
@@ -6837,6 +6884,18 @@ function AdminSettlement() {
   const totalPlatformFee = summary.reduce((s, x) => s + x.platformFee, 0)
   const totalNet = summary.reduce((s, x) => s + x.netAmount, 0)
   const pendingSalons = summary.filter(s => s.pendingCount > 0)
+  // الصالونات المديونة للمنصة من الحجز اليدوي
+  const debtorSalons = summary.filter(s => s.manualOwedPending > 0)
+  const totalManualDebt = debtorSalons.reduce((s, x) => s + x.manualOwedPending, 0)
+
+  const collectManualDebt = async (sid) => {
+    const { error } = await supabase.from("bookings")
+      .update({ payment_status: "settled", settled_at: new Date().toISOString() })
+      .eq("salon_id", sid).eq("booking_type", "manual").neq("payment_status", "settled")
+    if (error) { toast("⚠ حدث خطأ: " + error.message); return }
+    toast("✅ تم تسجيل تحصيل العمولة من الصالون")
+    loadData()
+  }
 
   // تصدير CSV
   const exportCSV = () => {
@@ -6942,6 +7001,33 @@ function AdminSettlement() {
           <div style={{ fontSize:9, color:T.inkSoft }}>صالون معلق</div>
         </div>
       </div>
+
+      {/* لوحة مديونية الحجز اليدوي — مستحقات المنصة من الصالونات */}
+      {debtorSalons.length > 0 && (
+        <div style={{ background:"linear-gradient(135deg,#1976D2,#0D47A1)", borderRadius:16, padding:"16px", marginBottom:16 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+            <div style={{ fontSize:14, fontWeight:800, color:T.white }}>🖐️ مديونية الحجز اليدوي</div>
+            <div style={{ fontSize:18, fontWeight:900, color:T.white }}>{totalManualDebt.toLocaleString()} ر.س</div>
+          </div>
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {debtorSalons.map(s => (
+              <div key={s.salonId} style={{ background:"rgba(255,255,255,.12)", borderRadius:12, padding:"10px 12px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:700, color:T.white }}>{s.name}</div>
+                  <div style={{ fontSize:11, color:"rgba(255,255,255,.8)" }}>{s.manualBookingsCount} حجز يدوي · {s.phone}</div>
+                </div>
+                <div style={{ textAlign:"left" }}>
+                  <div style={{ fontSize:14, fontWeight:800, color:"#FFD54F", marginBottom:4 }}>{s.manualOwedPending.toLocaleString()} ر.س</div>
+                  <button onClick={() => collectManualDebt(s.salonId)}
+                    style={{ padding:"4px 12px", borderRadius:20, border:"none", background:T.white, color:"#1976D2", fontSize:10, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    ✅ تم التحصيل
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* أزرار التصدير والاعتماد */}
       <div style={{ display:"flex", gap:8, marginBottom:16 }}>
@@ -7050,6 +7136,36 @@ function AdminSettlement() {
               🏦 آيبان: <span style={{ color:T.ink, fontWeight:600 }}>{s.iban}</span>
               {s.bank !== "—" && <span> · {s.bank}</span>}
             </div>
+
+            {/* مديونية الحجز اليدوي لنفس الصالون */}
+            {s.manualOwedPending > 0 && (
+              <div style={{ background:"#E3F2FD", borderRadius:10, padding:"8px 12px", marginTop:8, border:"1px solid #90CAF9" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:11 }}>
+                  <span style={{ color:"#1976D2", fontWeight:700 }}>🖐️ مستحق عليه من الحجز اليدوي ({s.manualBookingsCount})</span>
+                  <span style={{ fontWeight:800, color:"#0D47A1" }}>{s.manualOwedPending.toLocaleString()} ر.س</span>
+                </div>
+              </div>
+            )}
+
+            <button onClick={() => {
+                const lines = [
+                  `📄 كشف حساب — ${s.name}`,
+                  `بيوتي تيك 🌸`,
+                  ``,
+                  `إجمالي المبيعات: ${s.totalSales.toLocaleString()} ر.س`,
+                  `عمولة المنصة (10%): ${s.platformFee.toLocaleString()} ر.س`,
+                  `صافي مستحقك: ${s.netAmount.toLocaleString()} ر.س`,
+                  `عدد الحجوزات: ${s.bookingsCount}`,
+                ]
+                if (s.loveGiftAmount > 0) lines.push(``, `💝 إهداء محبة: ${s.loveGiftAmount.toLocaleString()} ر.س (صافيك ${s.loveGiftNet.toLocaleString()} ر.س)`)
+                if (s.manualOwedPending > 0) lines.push(``, `🖐️ مستحق علينا من الحجز اليدوي: ${s.manualOwedPending.toLocaleString()} ر.س`)
+                const waNum = (s.phone || "").replace(/^0/, "").replace(/[^0-9]/g, "")
+                const msg = encodeURIComponent(lines.join("\n"))
+                if (waNum) window.open(`https://wa.me/966${waNum}?text=${msg}`, "_blank")
+              }}
+              style={{ width:"100%", marginTop:10, padding:"8px", borderRadius:10, border:`1px solid ${T.creamDk}`, background:T.cream, color:T.inkSoft, fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+              📄 إرسال كشف حساب عبر واتساب
+            </button>
           </div>
         ))}
       </div>
@@ -7655,7 +7771,7 @@ export default function App() {
   if (screen === "terms-page")      return <TermsPage      setScreen={go} />
     if (screen === "404")             return <NotFoundPage   setScreen={go} />
     if (screen === "gift")             return <GiftPage        setScreen={go} salon={salon} setSalon={setSalon} />
-    if (screen === "my-bookings")      return <MyBookingsPage  setScreen={go} />
+    if (screen === "my-bookings")      return <MyBookingsPage  setScreen={go} setSalon={setSalon} />
     if (screen === "profile")           return <ClientProfile   setScreen={go} />
     return <ClientHome setScreen={go} setSalon={setSalon} />
   }
