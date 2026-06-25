@@ -741,23 +741,36 @@ function ClientHome({ setScreen, setSalon }) {
                     ))}
                   </div>
                 </div>
-                {/* Time slots visual */}
+                {/* Time slots visual — مبني على أوقات عمل الصالون الفعلية */}
                 <div style={{ marginBottom:14 }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:T.inkSoft, marginBottom:6 }}>الأوقات المتاحة</div>
+                  <div style={{ fontSize:11, fontWeight:700, color:T.inkSoft, marginBottom:6 }}>الأوقات المتاحة اليوم</div>
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
-                    {[
-                      { id:"morning",   icon:"🌅", label:"صباح",  available:true },
-                      { id:"afternoon", icon:"☀️",  label:"ظهيرة", available:true },
-                      { id:"evening",   icon:"🌙", label:"مساء",  available:false },
-                    ].map(sl => (
-                      <div key={sl.id} style={{ padding:"8px 6px", borderRadius:10, background:sl.available ? T.greenL : T.creamDk, textAlign:"center", opacity:sl.available ? 1 : .5 }}>
-                        <div style={{ fontSize:16 }}>{sl.icon}</div>
-                        <div style={{ fontSize:10, fontWeight:600, color:sl.available ? T.green : T.inkMuted, marginTop:2 }}>{sl.label}</div>
-                        <div style={{ fontSize:9, color:sl.available ? T.green : T.inkMuted }}>
-                          {sl.available ? "متاح" : "محجوز"}
-                        </div>
-                      </div>
-                    ))}
+                    {(() => {
+                      const todayName = new Date().toLocaleDateString("ar-SA", { weekday:"long" })
+                      const todaySchedule = s.workingHours?.[todayName]
+                      const isOpenToday = !s.workingHours || !todaySchedule || todaySchedule.open !== false
+                      const openFrom = todaySchedule?.from || "09:00"
+                      const openTo   = todaySchedule?.to   || "21:00"
+                      const toMinutes = (t) => { const [h,m] = t.split(":").map(Number); return h*60+m }
+                      const ranges = [
+                        { id:"morning",   icon:"🌅", label:"صباح",  from:"06:00", to:"12:00" },
+                        { id:"afternoon", icon:"☀️",  label:"ظهيرة", from:"12:00", to:"17:00" },
+                        { id:"evening",   icon:"🌙", label:"مساء",  from:"17:00", to:"23:59" },
+                      ]
+                      return ranges.map(sl => {
+                        // الفترة متاحة لو فيها تداخل مع ساعات دوام الصالون اليوم
+                        const available = isOpenToday && toMinutes(sl.from) < toMinutes(openTo) && toMinutes(sl.to) > toMinutes(openFrom)
+                        return (
+                          <div key={sl.id} style={{ padding:"8px 6px", borderRadius:10, background:available ? T.greenL : T.creamDk, textAlign:"center", opacity:available ? 1 : .5 }}>
+                            <div style={{ fontSize:16 }}>{sl.icon}</div>
+                            <div style={{ fontSize:10, fontWeight:600, color:available ? T.green : T.inkMuted, marginTop:2 }}>{sl.label}</div>
+                            <div style={{ fontSize:9, color:available ? T.green : T.inkMuted }}>
+                              {available ? "متاح" : "مغلق"}
+                            </div>
+                          </div>
+                        )
+                      })
+                    })()}
                   </div>
                 </div>
                 {/* Actions */}
@@ -1147,6 +1160,7 @@ function BookingPage({ salon, setScreen }) {
   const [phone, setPhone] = useState("")
   const [agreed, setAgreed] = useState(false)
   const [termsOpen, setTermsOpen] = useState(false)
+  const [bookedTimes, setBookedTimes] = useState([])
   const deposit = svc ? Math.round(svc.p * 0.3) : 0
   const platformFee = svc ? Math.round(svc.p * 0.10) : 0
   const salonAmount = deposit - platformFee  // العربون - عمولة المنصة
@@ -1158,7 +1172,17 @@ function BookingPage({ salon, setScreen }) {
     if (fi < 0 || ti < 0) return ALL_SVC_TIMES
     return ALL_SVC_TIMES.slice(fi, ti + 1)
   }
-  const TIMES = getSvcTimes()
+  const TIMES = getSvcTimes().filter(t => !bookedTimes.includes(t))
+
+  // جلب الأوقات المحجوزة فعلياً (يدوي + أونلاين) لهذا الصالون والتاريخ — لمنع تكرار الحجز
+  useEffect(() => {
+    if (!date || !salon?.id) { setBookedTimes([]); return }
+    supabase.from('bookings').select('appointment_time')
+      .eq('salon_id', salon.id)
+      .eq('appointment_date', date)
+      .in('status', ['pending', 'confirmed', 'completed'])
+      .then(({ data }) => setBookedTimes((data || []).map(b => b.appointment_time)))
+  }, [date, salon?.id])
 
   if (!salon) return null
 
@@ -1255,6 +1279,11 @@ function BookingPage({ salon, setScreen }) {
                     {tm}
                   </button>
                 ))}
+                {date && TIMES.length === 0 && (
+                  <div style={{ gridColumn:"span 4", textAlign:"center", padding:14, fontSize:12, color:T.red, background:T.redL, borderRadius:10 }}>
+                    لا توجد أوقات متاحة بهذا اليوم — جرّبي تاريخاً آخر
+                  </div>
+                )}
               </div>
             </div>
             <Field label="الاسم الكامل" placeholder="مثال: نورة العتيبي" value={name} onChange={e => setName(e.target.value)} required />
@@ -2126,6 +2155,8 @@ function ManualBookingModal({ salonId, onClose, onCreated, toast }) {
   const [clientPhone, setClientPhone] = useState("")
   const [bookedTimes, setBookedTimes] = useState([])
   const [saving, setSaving] = useState(false)
+  const [staffList, setStaffList] = useState([])
+  const [staffId, setStaffId] = useState("")
 
   useEffect(() => {
     const load = async () => {
@@ -2134,6 +2165,8 @@ function ManualBookingModal({ salonId, onClose, onCreated, toast }) {
         id: s.id, name: s.name, price: s.price,
         timeFrom: s.time_from || "09:00", timeTo: s.time_to || "18:00",
       })))
+      const { data: staffData } = await supabase.from('staff').select('*').eq('salon_id', salonId).eq('active', true)
+      setStaffList(staffData || [])
       setLoadingSvcs(false)
     }
     load()
@@ -2164,6 +2197,7 @@ function ManualBookingModal({ salonId, onClose, onCreated, toast }) {
   const submit = async () => {
     if (!svc || !date || !time || !clientName || !clientPhone) { toast("⚠ أكملي كل الحقول"); return }
     setSaving(true)
+    const selectedStaff = staffList.find(st => st.id === staffId)
     const { error } = await supabase.from('bookings').insert([{
       salon_id: salonId,
       client_name: clientName,
@@ -2171,6 +2205,8 @@ function ManualBookingModal({ salonId, onClose, onCreated, toast }) {
       appointment_date: date,
       appointment_time: time,
       service_name: svc.name,
+      staff_id: staffId || null,
+      staff_name: selectedStaff?.name || null,
       total_amount: svc.price,
       deposit_amount: 0,
       platform_fee: fee,
@@ -2184,8 +2220,9 @@ function ManualBookingModal({ salonId, onClose, onCreated, toast }) {
     // رسالة واتساب للعميلة
     const waNum = (clientPhone || "").replace(/^0/, "").replace(/[^0-9]/g, "")
     if (waNum) {
+      const staffLine = selectedStaff ? `\nمع: ${selectedStaff.name}` : ""
       const msg = encodeURIComponent(
-        `🌸 تم تأكيد حجزك عبر بيوتي تيك!\nالخدمة: ${svc.name}\nالوقت: ${time}\nالتاريخ: ${date}`
+        `🌸 تم تأكيد حجزك عبر بيوتي تيك!\nالخدمة: ${svc.name}${staffLine}\nالوقت: ${time}\nالتاريخ: ${date}`
       )
       setTimeout(() => window.open(`https://wa.me/966${waNum}?text=${msg}`, "_blank"), 600)
     }
@@ -2218,6 +2255,25 @@ function ManualBookingModal({ salonId, onClose, onCreated, toast }) {
               {services.length === 0 && <div style={{ fontSize:12, color:T.inkSoft, textAlign:"center", padding:10 }}>أضيفي خدمات أولاً من تبويب الخدمات</div>}
             </div>
 
+            {staffList.length > 0 && (
+              <>
+                <label style={{ fontSize:12, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:6 }}>مع الموظفة (اختياري)</label>
+                <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:14 }}>
+                  <button onClick={() => setStaffId("")}
+                    style={{ display:"flex", justifyContent:"space-between", padding:"10px 12px", borderRadius:10, border:`1.5px solid ${!staffId ? T.roseDp : T.creamDk}`, background:!staffId ? T.roseL : T.white, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    <span style={{ fontSize:13, fontWeight:700, color:T.ink }}>بدون تحديد</span>
+                  </button>
+                  {staffList.map(st => (
+                    <button key={st.id} onClick={() => setStaffId(st.id)}
+                      style={{ display:"flex", justifyContent:"space-between", padding:"10px 12px", borderRadius:10, border:`1.5px solid ${staffId===st.id ? T.roseDp : T.creamDk}`, background:staffId===st.id ? T.roseL : T.white, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                      <span style={{ fontSize:13, fontWeight:700, color:T.ink }}>{st.name}</span>
+                      {st.specialty && <span style={{ fontSize:11, color:T.inkSoft }}>{st.specialty}</span>}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
             <label style={{ fontSize:12, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:6 }}>التاريخ *</label>
             <input type="date" value={date} onChange={e => { setDate(e.target.value); setTime("") }}
               style={{ width:"100%", padding:"10px 12px", border:`1px solid ${T.creamDk}`, borderRadius:10, fontSize:13, fontFamily:"Tajawal,sans-serif", background:T.white, marginBottom:14 }} />
@@ -2249,7 +2305,10 @@ function ManualBookingModal({ salonId, onClose, onCreated, toast }) {
               <div style={{ background:T.white, borderRadius:12, padding:"12px 14px", marginBottom:16, border:`1.5px solid ${T.goldL}` }}>
                 <div style={{ fontSize:12, fontWeight:700, color:T.ink, marginBottom:8 }}>📋 ملخص الحجز</div>
                 {[
-                  ["المبلغ الكامل", svc.price + " ر.س", T.ink],
+                  ["✂️ الخدمة", svc.name, T.ink],
+                  ...(staffId ? [["👩‍💼 الموظفة", staffList.find(s=>s.id===staffId)?.name || "", T.ink]] : []),
+                  ["⏰ الوقت", time || "—", T.ink],
+                  ["💰 المبلغ الكامل", svc.price + " ر.س", T.ink],
                   ["عمولة المنصة (3%)", fee + " ر.س", "#C62828"],
                   ["✅ صافي الصالون", salonNet + " ر.س", T.green],
                 ].map(r => (
@@ -2480,6 +2539,7 @@ function OwnerBookings() {
               </div>
               <div style={{ fontSize:12, color:T.inkSoft, marginBottom:8 }}>
                 📞 {bk.client_phone} · 📅 {bk.appointment_date} · ⏰ {bk.appointment_time}
+                {bk.staff_name && <> · 👩‍💼 {bk.staff_name}</>}
               </div>
               <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, marginBottom:10 }}>
                 {(() => {
