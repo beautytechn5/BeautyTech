@@ -442,11 +442,22 @@ function ClientHome({ setScreen, setSalon }) {
   const [fq, setFq]         = useState(false)
   const [showSugg, setShowSugg] = useState(false)
   const [availNow, setAvailNow] = useState(false)
-  const [sortBy, setSortBy] = useState("recommended") // recommended | rating | price | popular
+  const [sortBy, setSortBy] = useState("recommended") // recommended | rating | price | popular | nearest | fastest
   const [priceRange, setPriceRange] = useState([0, 1000])
   const [dragging, setDragging] = useState(null)
   const [showFilters, setShowFilters] = useState(false)
   const [timeSlot, setTimeSlot] = useState(null) // null | morning | afternoon | evening
+  const [myCity, setMyCity] = useState("")        // مدينة العميلة — لفلتر المنطقة و"الأقرب لك"
+  const [detectingCity, setDetectingCity] = useState(false)
+
+  const CITIES = ["الرياض","جدة","مكة المكرمة","المدينة المنورة","الدمام","الخبر","أبها","تبوك","القصيم"]
+
+  // أقرب وقت متاح اليوم لكل صالون (للترتيب بـ"الأسرع توفر")
+  const earliestSlot = (s) => {
+    const times = (s.services || []).map(sv => sv.timeFrom).filter(Boolean)
+    if (times.length === 0) return "23:59"
+    return times.sort()[0]
+  }
 
   const filtered_sugg = q.length > 0
     ? SUGGESTIONS.filter(s => s.text.includes(q))
@@ -455,6 +466,7 @@ function ClientHome({ setScreen, setSalon }) {
   // فلترة + ترتيب الصالونات
   let list = salons.filter(s => !filterType || (filterType==="offers" ? s.hasOffers : filterType==="packages" ? s.hasPackages : true)).filter(s => {
     if (availNow && !s.availNow) return false
+    if (myCity && s.city !== myCity) return false
     if (q && !s.name.includes(q) && !s.area.includes(q) && !(s.tags || []).some(t => t.includes(q))) return false
     const minP = s.services && s.services.length > 0 ? Math.min(...s.services.map(sv => sv.p)) : 0
     if (minP < priceRange[0] || minP > priceRange[1]) return false
@@ -465,8 +477,14 @@ function ClientHome({ setScreen, setSalon }) {
   if (sortBy === "price")       list = [...list].sort((a,b) => Math.min(...a.services.map(s=>s.p)) - Math.min(...b.services.map(s=>s.p)))
   if (sortBy === "popular")     list = [...list].sort((a,b) => b.reviews - a.reviews)
   if (sortBy === "recommended") list = [...list].sort((a,b) => (b.rating * 0.6 + (b.reviews/100) * 0.4) - (a.rating * 0.6 + (a.reviews/100) * 0.4))
+  if (sortBy === "nearest")     list = [...list].sort((a,b) => {
+    const aMatch = myCity && a.city === myCity ? 0 : 1
+    const bMatch = myCity && b.city === myCity ? 0 : 1
+    return aMatch - bMatch
+  })
+  if (sortBy === "fastest")     list = [...list].sort((a,b) => earliestSlot(a).localeCompare(earliestSlot(b)))
 
-  const activeFilters = (availNow ? 1 : 0) + (priceRange[0] > 0 || priceRange[1] < 1000 ? 1 : 0) + (timeSlot ? 1 : 0)
+  const activeFilters = (availNow ? 1 : 0) + (priceRange[0] > 0 || priceRange[1] < 1000 ? 1 : 0) + (timeSlot ? 1 : 0) + (myCity ? 1 : 0)
 
   return (
     <div style={{ background:T.cream, minHeight:"100vh", paddingBottom:40 }}>
@@ -534,6 +552,8 @@ function ClientHome({ setScreen, setSalon }) {
           {/* ترتيب */}
           {[
             { id:"recommended", label:"الأنسب", icon:"✦" },
+            { id:"nearest",     label:"الأقرب لك", icon:"📍" },
+            { id:"fastest",     label:"الأسرع توفر", icon:"⚡" },
             { id:"rating",      label:"الأعلى تقييماً", icon:"⭐" },
             { id:"price",       label:"الأقل سعراً", icon:"💰" },
             { id:"popular",     label:"الأكثر حجزاً", icon:"🔥" },
@@ -548,6 +568,43 @@ function ClientHome({ setScreen, setSalon }) {
         {/* Expanded filters panel */}
         {showFilters && (
           <div style={{ background:T.white, borderRadius:16, padding:"16px", marginBottom:14, boxShadow:"0 2px 16px rgba(44,32,24,.07)" }}>
+
+            {/* المنطقة / المدينة */}
+            <div style={{ marginBottom:16 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>📍 المنطقة</div>
+                <button onClick={async () => {
+                    setDetectingCity(true)
+                    if (!navigator.geolocation) { setDetectingCity(false); return }
+                    navigator.geolocation.getCurrentPosition(async (pos) => {
+                      try {
+                        const { latitude, longitude } = pos.coords
+                        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=ar`)
+                        const data = await res.json()
+                        const detected = data?.address?.city || data?.address?.state || ""
+                        const matched = CITIES.find(c => detected.includes(c) || c.includes(detected))
+                        if (matched) setMyCity(matched)
+                      } catch(e) {}
+                      setDetectingCity(false)
+                    }, () => setDetectingCity(false))
+                  }}
+                  style={{ fontSize:11, fontWeight:700, color:T.roseDp, background:"none", border:"none", cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                  {detectingCity ? "...جارٍ التحديد" : "📡 حدد موقعي تلقائياً"}
+                </button>
+              </div>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                <button onClick={() => setMyCity("")}
+                  style={{ padding:"6px 14px", borderRadius:20, border:`1px solid ${!myCity ? T.roseDp : T.creamDk}`, background:!myCity ? T.roseL : T.white, color:!myCity ? T.roseDp : T.inkSoft, fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                  كل المناطق
+                </button>
+                {CITIES.map(c => (
+                  <button key={c} onClick={() => setMyCity(c)}
+                    style={{ padding:"6px 14px", borderRadius:20, border:`1px solid ${myCity===c ? T.roseDp : T.creamDk}`, background:myCity===c ? T.roseL : T.white, color:myCity===c ? T.roseDp : T.inkSoft, fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    {c}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             {/* Price range */}
             <div style={{ marginBottom:16 }}>
@@ -601,7 +658,7 @@ function ClientHome({ setScreen, setSalon }) {
 
             {/* Reset */}
             {activeFilters > 0 && (
-              <button onClick={() => { setAvailNow(false); setPriceRange([0,1000]); setTimeSlot(null) }}
+              <button onClick={() => { setAvailNow(false); setPriceRange([0,1000]); setTimeSlot(null); setMyCity("") }}
                 style={{ marginTop:12, width:"100%", padding:"9px", borderRadius:10, border:`1px solid ${T.roseL}`, background:T.white, color:T.roseDp, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
                 ✕ إلغاء كل الفلاتر
               </button>
@@ -659,6 +716,9 @@ function ClientHome({ setScreen, setSalon }) {
                     <span style={{ color:T.inkSoft, fontWeight:400 }}> ({s.reviews})</span>
                   </span>
                   <span style={{ fontSize:12, color:T.inkSoft }}>📍 {s.city}, {s.area}</span>
+                  {myCity && s.city === myCity && (
+                    <span style={{ background:T.greenL, color:T.green, fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>📍 في مدينتك</span>
+                  )}
                 </div>
                 <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:12 }}>
                   {s.tags.map(tg => (
