@@ -108,7 +108,6 @@ function TermsModal({ open, onClose }) {
     { t:"٢. الحجز والعربون", b:"يُشترط دفع عربون 30% عند الحجز. العربون غير مسترد عند الإلغاء، ويُخصم من الفاتورة النهائية." },
     { t:"٣. تعديل المواعيد", b:"يحق للعميلة تعديل موعدها مرة واحدة فقط قبل 24 ساعة من الموعد." },
     { t:"٤. الخصوصية", b:"تلتزم المنصة بحماية بيانات المستخدمين وعدم مشاركتها مع أطراف ثالثة." },
-    { t:"٥. إلغاء الاشتراك", b:"رسوم الاشتراك المدفوعة غير مستردة. رسوم التأسيس 600 ر.س غير مستردة في جميع الأحوال." },
   ]
   return (
     <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(44,32,24,.5)", zIndex:3000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
@@ -1472,14 +1471,16 @@ function TermsPage({ setScreen }) {
     { t:"١. رسوم التأسيس", b:"تُدفع رسوم تأسيس مرة واحدة عند الانضمام للمنصة وإعداد الحساب." },
     { t:"٢. رسوم الاشتراك", b:"تُدفع رسوم الاشتراك الشهرية أو السنوية حسب الباقة المختارة. الاشتراك السنوي يوفر شهراً مجانياً (11 شهراً فقط)." },
     { t:"٣. التجربة المجانية", b:"تُمنح تجربة مجانية لمدة 14 يوماً للصالون الجديد مرة واحدة فقط لكل صالون (يُتحقق بالإيميل ورقم الجوال)." },
-    { t:"٤. عمولة المنصة", b:"تأخذ المنصة عمولة 10% من قيمة كل خدمة مُنجزة. تُخصم من العربون المدفوع من العميلة. مثال: خدمة 200 ر.س → عربون 60 ر.س → عمولة المنصة 20 ر.س → يُحوَّل للصالون 40 ر.س." },
-    { t:"٥. موعد التحويل", b:"تُحوَّل مستحقات الصالون يومياً في نهاية كل يوم." },
-    { t:"٦. سياسة ترقية الباقة", b:"يمكن الترقية لباقة أعلى في أي وقت بدفع الفرق بين الباقتين + رسوم ترقية 100 ر.س. يتم التفعيل فور إتمام الدفع." },
-    { t:"٧. سياسة تخفيض الباقة", b:"لا يمكن تخفيض الباقة إلا بعد انتهاء فترة الاشتراك الحالية. يُطبَّق التخفيض تلقائياً عند التجديد." },
-    { t:"٨. إدارة الحجوزات", b:"الصالون مسؤول عن تحديث حالة الحجوزات (مكتمل/ملغي) في الوقت المناسب. التأخر يؤثر على موعد التحويل." },
-    { t:"٩. المحتوى والسلوك", b:"يلتزم الصالون بعدم نشر محتوى مضلل أو مخالف للأنظمة. المنصة تحتفظ بحق إيقاف الحساب المخالف." },
-    { t:"١٠. إيقاف الخدمة", b:"للمنصة الحق في إيقاف حساب أي صالون يخالف الشروط أو يتلقى تقييمات سلبية متكررة بعد إشعار مسبق." },
-    { t:"١١. التعديلات", b:"تحتفظ المنصة بحق تعديل الأسعار والشروط مع إشعار مسبق بـ 30 يوماً." },
+    { t:"٤. عمولة المنصة", b:"تأخذ المنصة عمولة 10% من قيمة كل خدمة مُنجزة عبر الحجز الأونلاين. تُخصم من العربون المدفوع من العميلة. مثال: خدمة 200 ر.س → عربون 60 ر.س → عمولة المنصة 20 ر.س → يُحوَّل للصالون 40 ر.س." },
+    { t:"٥. عمولة الحجز اليدوي/الحضوري", b:"للحجوزات التي تُسجَّل يدوياً من الاستقبال (عميلة حاضرة بالصالون تدفع كاش مباشرة)، تستحق المنصة عمولة 3% من قيمة الخدمة الكاملة، يُحوِّلها الصالون للمنصة ضمن التسوية اليومية." },
+    { t:"٦. موعد التحويل", b:"تُحوَّل مستحقات الصالون يومياً في نهاية كل يوم. وبالمثل، يُحوِّل الصالون مستحقات المنصة من الحجوزات اليدوية ضمن نفس التسوية اليومية." },
+    { t:"٧. سياسة ترقية الباقة", b:"يمكن الترقية لباقة أعلى في أي وقت بدفع الفرق بين الباقتين + رسوم ترقية 100 ر.س. يتم التفعيل فور إتمام الدفع." },
+    { t:"٨. سياسة تخفيض الباقة", b:"لا يمكن تخفيض الباقة إلا بعد انتهاء فترة الاشتراك الحالية. يُطبَّق التخفيض تلقائياً عند التجديد." },
+    { t:"٩. إدارة الحجوزات", b:"الصالون مسؤول عن تحديث حالة الحجوزات (مكتمل/ملغي) في الوقت المناسب. التأخر يؤثر على موعد التحويل." },
+    { t:"١٠. انتهاء التجربة المجانية", b:"عند انتهاء فترة التجربة المجانية (14 يوماً) دون تفعيل باقة مدفوعة، يتم تعليق الوصول إلى لوحة التحكم تلقائياً حتى يتواصل الصالون مع المنصة لإكمال التفعيل." },
+    { t:"١١. المحتوى والسلوك", b:"يلتزم الصالون بعدم نشر محتوى مضلل أو مخالف للأنظمة. المنصة تحتفظ بحق إيقاف الحساب المخالف." },
+    { t:"١٢. إيقاف الخدمة", b:"للمنصة الحق في إيقاف حساب أي صالون يخالف الشروط أو يتلقى تقييمات سلبية متكررة بعد إشعار مسبق." },
+    { t:"١٣. التعديلات", b:"تحتفظ المنصة بحق تعديل الأسعار والشروط مع إشعار مسبق بـ 30 يوماً." },
   ]
 
   const salonClientTerms = [
@@ -1971,6 +1972,31 @@ function OwnerDashboard({ setScreen }) {
   const daysLeft = salonInfo.trial_end
     ? Math.max(0, Math.ceil((new Date(salonInfo.trial_end) - new Date()) / (1000*60*60*24)))
     : 14
+  const trialExpired = salonInfo.trial_end && new Date(salonInfo.trial_end) < new Date()
+
+  // قفل لوحة التحكم عند انتهاء التجربة المجانية بدون تفعيل باقة مدفوعة
+  if (trialExpired) return (
+    <div style={{ background:T.cream, minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+      <div style={{ width:"100%", maxWidth:380, textAlign:"center" }}>
+        <div style={{ fontSize:56, marginBottom:16 }}>⏳</div>
+        <div style={{ fontSize:19, fontWeight:900, color:T.ink, marginBottom:10 }}>انتهت التجربة المجانية</div>
+        <p style={{ fontSize:14, color:T.inkSoft, lineHeight:1.8, marginBottom:24 }}>
+          استمتعتِ بـ 14 يوم مجاناً على بيوتي تيك 🌸<br/>
+          تواصلي معنا لتفعيل باقتك ومتابعة استقبال الحجوزات
+        </p>
+        <div style={{ background:T.white, borderRadius:16, padding:"18px", marginBottom:20, border:`1.5px solid ${T.roseL}` }}>
+          <div style={{ fontSize:13, fontWeight:700, color:T.ink, marginBottom:8 }}>{salonInfo.name}</div>
+          <div style={{ fontSize:12, color:T.inkSoft }}>الباقة المختارة: {salonInfo.package === "basic" ? "الأساسية" : salonInfo.package === "pro" ? "التوسع" : "النخبة"}</div>
+        </div>
+        <PBtn full onClick={() => window.open("https://wa.me/966552401658?text=" + encodeURIComponent("أرغب بتفعيل باقتي بعد انتهاء التجربة المجانية — صالون: " + salonInfo.name), "_blank")}>
+          💬 تواصلي معنا للتفعيل
+        </PBtn>
+        <div style={{ marginTop:14 }}>
+          <span onClick={async () => { await supabase.auth.signOut(); setScreen("client-home") }} style={{ fontSize:12, color:T.inkMuted, cursor:"pointer" }}>تسجيل الخروج</span>
+        </div>
+      </div>
+    </div>
+  )
 
   return (
     <div style={{ background:T.cream, minHeight:"100vh" }}>
@@ -2030,13 +2056,11 @@ function OwnerDashboard({ setScreen }) {
       <div style={{ padding:"18px 16px" }}>
         {tab === "overview"  && <OwnerOverview />}
         {tab === "bookings"  && <OwnerBookings />}
+        {tab === "love_gifts" && <OwnerLoveGifts toast={toast} />}
         {tab === "services"  && <OwnerServices toast={toast} />}
         {tab === "inventory" && <OwnerInventory toast={toast} />}
         {tab === "whatsapp"  && <OwnerWhatsapp toast={toast} />}
         {tab === "settings"  && <OwnerSettings toast={toast} />}
-        {tab === "calendar"  && <OwnerCalendar toast={toast} />}
-        {tab === "staff"     && <OwnerStaff toast={toast} />}
-        {tab === "broadcast" && <OwnerBroadcast toast={toast} />}
         {tab === "calendar"  && <OwnerCalendar toast={toast} />}
         {tab === "staff"     && <OwnerStaff toast={toast} />}
         {tab === "broadcast" && <OwnerBroadcast toast={toast} />}
@@ -2145,7 +2169,7 @@ function ManualBookingModal({ salonId, onClose, onCreated, toast }) {
   }
 
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:200, display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={onClose}>
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:3000, display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ background:T.cream, borderRadius:"24px 24px 0 0", padding:"20px 18px", width:"100%", maxWidth:480, maxHeight:"88vh", overflowY:"auto" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
           <div style={{ fontSize:16, fontWeight:800, color:T.ink }}>🖐️ حجز يدوي — عميلة حاضرة بالصالون</div>
@@ -2222,6 +2246,101 @@ function ManualBookingModal({ salonId, onClose, onCreated, toast }) {
 }
 
 
+/* ══════════════════════════════════════════
+   💝 OWNER LOVE GIFTS — حجوزات إهداء المحبة فقط
+══════════════════════════════════════════ */
+function OwnerLoveGifts({ toast }) {
+  const [bookings, setBookings] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { setLoading(false); return }
+      const { data: salon } = await supabase.from('salons').select('id').eq('email', session.user.email)
+      if (!salon?.[0]) { setLoading(false); return }
+      const { data } = await supabase.from('bookings')
+        .select('*')
+        .eq('salon_id', salon[0].id)
+        .eq('booking_type', 'love_gift')
+        .order('appointment_date', { ascending: false })
+      setBookings(data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const updateStatus = async (id, status) => {
+    await supabase.from('bookings').update({ status }).eq('id', id)
+    setBookings(b => b.map(bk => bk.id === id ? { ...bk, status } : bk))
+    toast(status === "completed" ? "✅ تم تحديد الحجز كمكتمل" : "تم إلغاء الحجز")
+  }
+
+  const STATUS = {
+    pending:   { label:"قيد الانتظار", color:T.gold,    bg:T.goldPale },
+    confirmed: { label:"مؤكد",         color:T.green,   bg:T.greenL },
+    completed: { label:"مكتمل",        color:T.inkSoft, bg:T.creamDk },
+    cancelled: { label:"ملغي",         color:T.red,     bg:T.redL },
+  }
+
+  const totalReceived = bookings.filter(b=>b.status==="completed").reduce((s,b) => s + calcCommission(b).salonGet, 0)
+
+  return (
+    <div>
+      <div style={{ fontSize:16, fontWeight:800, color:T.ink, marginBottom:4 }}>💝 إهداء المحبة</div>
+      <div style={{ fontSize:11, color:T.inkSoft, marginBottom:16 }}>حجوزات مدفوعة بالكامل من عميلات تُهدي صاحباتهن</div>
+
+      <div style={{ background:"linear-gradient(135deg,#C2185B,#880E4F)", borderRadius:14, padding:"14px", textAlign:"center", marginBottom:16 }}>
+        <div style={{ fontSize:22, fontWeight:900, color:T.white }}>{totalReceived.toLocaleString()} ر.س</div>
+        <div style={{ fontSize:10, color:"rgba(255,255,255,.85)", marginTop:3 }}>صافي مستحقاتك من إهداء المحبة (90%)</div>
+      </div>
+
+      {loading && <div style={{ textAlign:"center", padding:30, color:T.inkSoft }}>...جاري التحميل</div>}
+      {!loading && bookings.length === 0 && <Empty icon="💝" title="لا توجد حجوزات إهداء محبة" desc="ستظهر هنا فور وصول إهداء جديد" />}
+
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        {bookings.map(bk => {
+          const st = STATUS[bk.status] || STATUS.pending
+          const { fee, salonGet } = calcCommission(bk)
+          return (
+            <Card key={bk.id} style={{ padding:14, border:"2px solid #F48FB1" }}>
+              <div style={{ background:"linear-gradient(135deg,#F48FB1,#E91E63)", borderRadius:"10px 10px 0 0", margin:"-14px -14px 10px -14px", padding:"8px 14px", display:"flex", alignItems:"center", gap:8 }}>
+                <span style={{ fontSize:16 }}>💝</span>
+                <span style={{ fontSize:12, fontWeight:800, color:"#fff" }}>إهداء محبة — المبلغ الكامل مدفوع مسبقاً</span>
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                <div style={{ fontSize:14, fontWeight:800, color:T.ink }}>{bk.client_name}</div>
+                <span style={{ background:st.bg, color:st.color, fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20 }}>{st.label}</span>
+              </div>
+              <div style={{ fontSize:12, color:T.inkSoft, marginBottom:8 }}>
+                {bk.service_name} · 📅 {bk.appointment_date} · ⏰ {bk.appointment_time}
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, marginBottom:10 }}>
+                <span style={{ color:T.inkSoft }}>المبلغ الكامل: <span style={{ color:"#E91E63", fontWeight:700 }}>{bk.total_amount} ر.س</span></span>
+                <span style={{ color:T.inkSoft }}>صافيك (90%): <span style={{ color:T.green, fontWeight:700 }}>{salonGet} ر.س</span></span>
+              </div>
+              {bk.status === "pending" && (
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={() => updateStatus(bk.id, "confirmed")}
+                    style={{ flex:2, padding:"8px", borderRadius:10, border:"none", background:`linear-gradient(135deg,${T.green},#2E7D32)`, color:T.white, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    ✓ قبول الحجز
+                  </button>
+                </div>
+              )}
+              {bk.status === "confirmed" && (
+                <button onClick={() => updateStatus(bk.id, "completed")}
+                  style={{ width:"100%", padding:"8px", borderRadius:10, border:"none", background:T.greenL, color:T.green, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                  ✅ تم الاستقبال
+                </button>
+              )}
+            </Card>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function OwnerBookings() {
   const [bookings, setBookings] = useState([])
   const [loading, setLoading] = useState(true)
@@ -2278,9 +2397,11 @@ function OwnerBookings() {
 
   return (
     <div>
-      <PBtn full onClick={() => setShowManual(true)} style={{ marginBottom:14 }}>
-        🖐️ تسجيل حجز يدوي (عميلة حاضرة بالصالون)
-      </PBtn>
+      <div style={{ marginBottom:14 }}>
+        <PBtn full onClick={() => setShowManual(true)}>
+          🖐️ تسجيل حجز يدوي (عميلة حاضرة بالصالون)
+        </PBtn>
+      </div>
       {showManual && salonId && (
         <ManualBookingModal salonId={salonId} toast={toast}
           onClose={() => setShowManual(false)}
@@ -6271,11 +6392,16 @@ function AdminCommissions() {
 
   const completedBks = bookings.filter(b => b.status === "completed")
   const getFee = (b) => calcCommission(b).fee
-  const totalCommission    = completedBks.reduce((s,b) => s + getFee(b), 0)
-  const settledCommission  = completedBks.filter(b => b.payment_status==="settled").reduce((s,b) => s + getFee(b), 0)
-  const pendingCommission  = completedBks.filter(b => b.payment_status!=="settled").reduce((s,b) => s + getFee(b), 0)
+  const totalCommission    = completedBks.filter(b=>b.booking_type!=="manual").reduce((s,b) => s + getFee(b), 0)
+  const settledCommission  = completedBks.filter(b => b.payment_status==="settled" && b.booking_type!=="manual").reduce((s,b) => s + getFee(b), 0)
+  const pendingCommission  = completedBks.filter(b => b.payment_status!=="settled" && b.booking_type!=="manual").reduce((s,b) => s + getFee(b), 0)
   const loveGiftCommission = completedBks.filter(b => b.booking_type==="love_gift").reduce((s,b) => s + getFee(b), 0)
-  const serviceCommission  = completedBks.filter(b => b.booking_type!=="love_gift").reduce((s,b) => s + getFee(b), 0)
+  const serviceCommission  = completedBks.filter(b => b.booking_type!=="love_gift" && b.booking_type!=="manual").reduce((s,b) => s + getFee(b), 0)
+  // عمولة الحجز اليدوي — مستحقة من الصالون للمنصة (عكس الاتجاه)
+  const manualBks = completedBks.filter(b => b.booking_type === "manual")
+  const manualCommission        = manualBks.reduce((s,b) => s + getFee(b), 0)
+  const manualCommissionSettled = manualBks.filter(b=>b.payment_status==="settled").reduce((s,b) => s + getFee(b), 0)
+  const manualCommissionPending = manualBks.filter(b=>b.payment_status!=="settled").reduce((s,b) => s + getFee(b), 0)
 
   const exportCSV = () => {
     const rows = [
@@ -6324,6 +6450,14 @@ function AdminCommissions() {
           <div style={{ fontSize:18, fontWeight:900, color:T.roseDp }}>{serviceCommission.toLocaleString()}</div>
           <div style={{ fontSize:10, color:T.inkSoft }}>✂️ خدمات عادية</div>
         </div>
+        <div style={{ background:"linear-gradient(135deg,#1976D2,#0D47A1)", borderRadius:14, padding:"14px", textAlign:"center", gridColumn:"span 2" }}>
+          <div style={{ fontSize:20, fontWeight:900, color:T.white }}>{manualCommission.toLocaleString()} ر.س</div>
+          <div style={{ fontSize:10, color:"rgba(255,255,255,.85)", marginTop:3 }}>🖐️ عمولة الحجز اليدوي (3%) — مستحقة من الصالونات</div>
+          <div style={{ display:"flex", justifyContent:"center", gap:14, marginTop:8, fontSize:10, color:"rgba(255,255,255,.85)" }}>
+            <span>✅ محصّلة: {manualCommissionSettled.toLocaleString()} ر.س</span>
+            <span>⏳ معلقة: {manualCommissionPending.toLocaleString()} ر.س</span>
+          </div>
+        </div>
       </div>
 
       {/* فلاتر */}
@@ -6351,32 +6485,34 @@ function AdminCommissions() {
       <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
         {bookings.map(bk => {
           const isLoveGift = bk.booking_type === "love_gift"
+          const isManual = bk.booking_type === "manual"
+          const { fee, salonGet } = calcCommission(bk)
           return (
-            <div key={bk.id} style={{ background:T.white, borderRadius:12, padding:"12px 14px", border:`1.5px solid ${isLoveGift ? "#F8BBD0" : T.creamDk}` }}>
+            <div key={bk.id} style={{ background:T.white, borderRadius:12, padding:"12px 14px", border:`1.5px solid ${isLoveGift ? "#F8BBD0" : isManual ? "#90CAF9" : T.creamDk}` }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
                 <div>
                   <span style={{ fontSize:13, fontWeight:700, color:T.ink }}>{bk.salons?.name || "صالون"}</span>
                   <span style={{ fontSize:11, color:T.inkSoft, marginRight:8 }}> · {bk.client_name}</span>
                 </div>
-                <span style={{ background:bk.payment_status==="settled" ? T.greenL : T.roseL, color:bk.payment_status==="settled" ? T.green : T.roseDp, fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>
-                  {bk.payment_status === "settled" ? "✅ محوَّل" : "⏳ معلق"}
+                <span style={{ background:bk.payment_status==="settled" ? T.greenL : isManual ? "#E3F2FD" : T.roseL, color:bk.payment_status==="settled" ? T.green : isManual ? "#1976D2" : T.roseDp, fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>
+                  {bk.payment_status === "settled" ? (isManual ? "✅ حُصِّلت" : "✅ محوَّل") : (isManual ? "⏳ مستحقة على الصالون" : "⏳ معلق")}
                 </span>
               </div>
               <div style={{ fontSize:11, color:T.inkSoft, marginBottom:6 }}>
-                {isLoveGift ? "💝 إهداء محبة" : "✂️ خدمة"} · {bk.appointment_date} · {bk.service_name||""}
+                {isLoveGift ? "💝 إهداء محبة" : isManual ? "🖐️ حجز يدوي" : "✂️ خدمة"} · {bk.appointment_date} · {bk.service_name||""}
               </div>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
                 <div style={{ background:T.cream, borderRadius:8, padding:"6px", textAlign:"center" }}>
                   <div style={{ fontSize:12, fontWeight:700, color:T.ink }}>{(bk.total_amount||0).toLocaleString()} ر.س</div>
-                  <div style={{ fontSize:9, color:T.inkSoft }}>قيمة الخدمة</div>
+                  <div style={{ fontSize:9, color:T.inkSoft }}>{isManual ? "المبلغ المستلم كاش" : "قيمة الخدمة"}</div>
                 </div>
                 <div style={{ background:"#FFEBEE", borderRadius:8, padding:"6px", textAlign:"center" }}>
-                  <div style={{ fontSize:12, fontWeight:700, color:"#C62828" }}>{(bk.platform_fee||0).toLocaleString()} ر.س</div>
-                  <div style={{ fontSize:9, color:T.inkSoft }}>عمولتك (10%)</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:"#C62828" }}>{fee.toLocaleString()} ر.س</div>
+                  <div style={{ fontSize:9, color:T.inkSoft }}>عمولتك ({isManual ? "3%" : "10%"})</div>
                 </div>
                 <div style={{ background:T.greenL, borderRadius:8, padding:"6px", textAlign:"center" }}>
-                  <div style={{ fontSize:12, fontWeight:700, color:T.green }}>{((bk.total_amount||0)-(bk.platform_fee||0)).toLocaleString()} ر.س</div>
-                  <div style={{ fontSize:9, color:T.inkSoft }}>للصالون</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:T.green }}>{salonGet.toLocaleString()} ر.س</div>
+                  <div style={{ fontSize:9, color:T.inkSoft }}>{isManual ? "صافي الصالون" : "للصالون"}</div>
                 </div>
               </div>
             </div>
@@ -6725,10 +6861,11 @@ function AdminSalonsList({ salonsList, onUpdate }) {
 
   const changePkg = async (sid, pkg) => {
     setSaving(true)
-    const { error } = await supabase.from("salons").update({ package: pkg }).eq("id", sid)
+    // عند تفعيل/تغيير الباقة من المدير، نلغي قفل التجربة المنتهية
+    const { error } = await supabase.from("salons").update({ package: pkg, trial_end: null }).eq("id", sid)
     setSaving(false)
     if (error) { toast("⚠ حدث خطأ: " + error.message); return }
-    toast("✅ تم تغيير الباقة!")
+    toast("✅ تم تغيير الباقة وتفعيل الحساب!")
     setEditId(null)
     setNewPkg("")
     onUpdate()   // يعيد جلب القائمة من Supabase
