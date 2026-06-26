@@ -1,6 +1,14 @@
 import { useState, useEffect, useCallback, createContext, useContext } from "react"
 import { supabase } from './supabase.js'
 
+/* ══════════════════════════════════════════
+   💳 إعدادات بوابة الدفع — ميسر (Moyasar)
+   المفتاح القابل للنشر (publishable) آمن للظهور بالمتصفح
+   المفتاح السري يبقى محفوظاً فقط داخل Edge Function ولا يظهر هنا أبداً
+══════════════════════════════════════════ */
+const MOYASAR_PUBLISHABLE_KEY = "pk_test_XXXXXXXXXXXXXXXXXXXXXXXX" // 🔴 استبدليه بمفتاحك الفعلي من لوحة ميسر
+const VERIFY_PAYMENT_URL = "https://cffjcobipldadwsgcwlx.supabase.co/functions/v1/verify-payment"
+
 const T = {
   rose:"#C8907A", roseDp:"#A8705A", roseL:"#F0D9D1", roseHov:"#96604A",
   gold:"#B8A060", goldL:"#E8D8A0", goldPale:"#F5EDD8", gold2:"#C8A870",
@@ -37,6 +45,102 @@ const useToast = () => useContext(ToastCtx)
 function Card({ children, style }) {
   return <div style={{ background:T.white, borderRadius:16, boxShadow:"0 2px 16px rgba(44,32,24,.07)", ...style }}>{children}</div>
 }
+
+/* ══════════════════════════════════════════
+   💳 MOYASAR PAYMENT MODAL — نافذة الدفع الآمنة
+   تحمّل نموذج ميسر الرسمي (الكارت بياناته ما تلمس موقعنا أبداً)
+   بعد نجاح الدفع، تستدعي Edge Function للتحقق والحفظ الآمن
+══════════════════════════════════════════ */
+function MoyasarPaymentModal({ amount, description, bookingFields, onSuccess, onClose, toast }) {
+  const [loaded, setLoaded] = useState(false)
+  const [verifying, setVerifying] = useState(false)
+  const [formId] = useState(() => "mysr-form-" + Math.random().toString(36).slice(2, 9))
+
+  useEffect(() => {
+    // تحميل سكربت ومكتبة ميسر مرة واحدة فقط
+    const loadMoyasar = () => {
+      if (window.Moyasar) { initForm(); return }
+      const css = document.createElement('link')
+      css.rel = 'stylesheet'
+      css.href = 'https://unpkg.com/@moyasar/moyasar-payment-form@2/dist/moyasar.css'
+      document.head.appendChild(css)
+      const script = document.createElement('script')
+      script.src = 'https://unpkg.com/@moyasar/moyasar-payment-form@2/dist/moyasar.umd.js'
+      script.onload = initForm
+      document.body.appendChild(script)
+    }
+
+    const initForm = () => {
+      window.Moyasar.init({
+        element: `.${formId}`,
+        amount: Math.round(amount * 100), // بالهللات
+        currency: 'SAR',
+        description,
+        publishable_api_key: MOYASAR_PUBLISHABLE_KEY,
+        callback_url: window.location.origin,
+        supported_networks: ['mada', 'visa', 'mastercard'],
+        methods: ['creditcard'],
+        on_completed: async function (payment) {
+          setVerifying(true)
+          try {
+            const res = await fetch(VERIFY_PAYMENT_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                payment_id: payment.id,
+                booking_data: {
+                  expected_amount: Math.round(amount * 100),
+                  booking_fields: bookingFields,
+                },
+              }),
+            })
+            const result = await res.json()
+            setVerifying(false)
+            if (!res.ok || result.error) {
+              toast("⚠ " + (result.error || "تعذّر تأكيد الدفع"))
+              return
+            }
+            onSuccess(result.booking)
+          } catch (e) {
+            setVerifying(false)
+            toast("⚠ حدث خطأ بالتحقق من الدفع: " + e.message)
+          }
+        },
+      })
+      setLoaded(true)
+    }
+
+    loadMoyasar()
+  }, [])
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:4000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }} onClick={verifying ? undefined : onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background:T.white, borderRadius:18, padding:"20px 18px", width:"100%", maxWidth:420, maxHeight:"90vh", overflowY:"auto" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+          <div style={{ fontSize:15, fontWeight:800, color:T.ink }}>💳 الدفع الآمن</div>
+          {!verifying && <button onClick={onClose} style={{ width:30, height:30, borderRadius:"50%", border:"none", background:T.cream, cursor:"pointer" }}>✕</button>}
+        </div>
+        <div style={{ background:T.goldPale, borderRadius:10, padding:"10px 14px", marginBottom:14, textAlign:"center" }}>
+          <div style={{ fontSize:11, color:T.inkSoft }}>المبلغ المطلوب</div>
+          <div style={{ fontSize:22, fontWeight:900, color:T.gold }}>{amount} ر.س</div>
+        </div>
+        {verifying && (
+          <div style={{ textAlign:"center", padding:30 }}>
+            <div style={{ fontSize:14, color:T.inkSoft }}>...جارٍ تأكيد الدفع وحفظ حجزك</div>
+          </div>
+        )}
+        <div className={formId} style={{ display: verifying ? "none" : "block" }} />
+        {!loaded && !verifying && (
+          <div style={{ textAlign:"center", padding:20, color:T.inkSoft, fontSize:13 }}>...جارٍ تحميل نموذج الدفع</div>
+        )}
+        <div style={{ fontSize:10, color:T.inkMuted, textAlign:"center", marginTop:10 }}>
+          🔒 بياناتك البنكية محمية بالكامل ولا تُحفظ في موقعنا
+        </div>
+      </div>
+    </div>
+  )
+}
+
 
 function PBtn({ children, onClick, disabled, gold, full, sm }) {
   const [h, setH] = useState(false)
@@ -1167,6 +1271,7 @@ function BookingPage({ salon, setScreen }) {
   const [agreed, setAgreed] = useState(false)
   const [termsOpen, setTermsOpen] = useState(false)
   const [bookedTimes, setBookedTimes] = useState([])
+  const [showPayment, setShowPayment] = useState(false)
   const deposit = svc ? Math.round(svc.p * 0.3) : 0
   const platformFee = svc ? Math.round(svc.p * 0.10) : 0
   const salonAmount = deposit - platformFee  // العربون - عمولة المنصة
@@ -1193,35 +1298,20 @@ function BookingPage({ salon, setScreen }) {
 
   if (!salon) return null
 
-  const confirm = async () => {
+  const [userId, setUserId] = useState(null)
+
+  // فتح بوابة الدفع — العربون يُدفع فعلياً قبل إنشاء الحجز
+  const openPayment = async () => {
     if (!agreed) { toast("⚠ يرجى الموافقة على الشروط"); return }
+    if (!name || !phone || !date || !time) { toast("⚠ أكملي كل البيانات"); return }
     const { data: { session } } = await supabase.auth.getSession()
-    const { error } = await supabase.from('bookings').insert([{
-      salon_id: salon.id || null,
-      client_name: name,
-      client_phone: phone,
-      appointment_date: date,
-      appointment_time: time,
-      total_amount: svc ? svc.p : 0,
-      deposit_amount: deposit,
-      status: 'pending',
-      payment_status: 'pending',
-      user_id: session?.user?.id || null,
-      service_name: svc ? svc.n : "",
-      booking_type: svc?.isOffer ? (svc.offerType || "offer") : "service",
-      platform_fee: platformFee,
-      salon_amount: salonAmount,
-    }])
-    if (error) {
-      if (error.message?.includes("duplicate key") || error.code === "23505") {
-        toast("⚠ تم حجز هذا الوقت للتو من عميلة أخرى — يرجى اختيار وقت آخر")
-        setTime("")
-        refreshBookedTimes()
-      } else {
-        toast("⚠ حدث خطأ: " + error.message)
-      }
-      return
-    }
+    setUserId(session?.user?.id || null)
+    setShowPayment(true)
+  }
+
+  // يُستدعى بعد نجاح الدفع والتحقق منه فعلياً عبر Edge Function
+  const handlePaymentSuccess = async () => {
+    setShowPayment(false)
 
     // رسالة تأكيد جاهزة للعميلة نفسها — تفتح واتسابها مباشرة لحفظ الموعد
     const myWaNum = (phone || "").replace(/^0/, "").replace(/[^0-9]/g, "")
@@ -1251,7 +1341,7 @@ function BookingPage({ salon, setScreen }) {
       const msg = encodeURIComponent(msgText)
       setTimeout(() => window.open(`https://wa.me/966${waNum}?text=${msg}`, "_blank"), 1200)
     }
-    toast("✅ تم الحجز! تأكيدك جاهز على واتساب")
+    toast("✅ تم الدفع والحجز بنجاح!")
     setTimeout(() => setScreen("client-home"), 1500)
   }
 
@@ -1369,12 +1459,37 @@ function BookingPage({ salon, setScreen }) {
             <div style={{ display:"flex", gap:10 }}>
               <OBtn onClick={() => setStep(2)}>← رجوع</OBtn>
               <div style={{ flex:1 }}>
-                <PBtn full onClick={confirm}>✓ تأكيد ودفع العربون</PBtn>
+                <PBtn full onClick={openPayment}>💳 الدفع وتأكيد الحجز</PBtn>
               </div>
             </div>
           </div>
         )}
       </div>
+
+      {showPayment && (
+        <MoyasarPaymentModal
+          amount={deposit}
+          description={`عربون حجز — ${svc?.n || ""} — ${salon.name}`}
+          toast={toast}
+          onClose={() => setShowPayment(false)}
+          bookingFields={{
+            salon_id: salon.id || null,
+            client_name: name,
+            client_phone: phone,
+            appointment_date: date,
+            appointment_time: time,
+            total_amount: svc ? svc.p : 0,
+            deposit_amount: deposit,
+            status: 'pending',
+            user_id: userId,
+            service_name: svc ? svc.n : "",
+            booking_type: svc?.isOffer ? (svc.offerType || "offer") : "service",
+            platform_fee: platformFee,
+            salon_amount: salonAmount,
+          }}
+          onSuccess={handlePaymentSuccess}
+        />
+      )}
     </div>
   )
 }
@@ -6052,6 +6167,8 @@ function GiftPage({ setScreen, salon, setSalon }) {
   const [focusF, setFocusF] = useState(null)
   const [saving, setSaving] = useState(false)
   const [bookedTimes, setBookedTimes] = useState([])
+  const [showPayment, setShowPayment] = useState(false)
+  const [userId, setUserId] = useState(null)
 
   const filteredSalons = salons.filter(s =>
     !q || s.name.includes(q) || (s.city || "").includes(q)
@@ -6090,39 +6207,20 @@ function GiftPage({ setScreen, salon, setSalon }) {
     outline:"none", fontFamily:"Tajawal,sans-serif", transition:"border-color .2s",
   })
 
-  const confirm = async () => {
+  const serviceNames = selectedServices.map(s => s.n).join("، ")
+
+  // فتح بوابة الدفع — المبلغ الكامل يُدفع فعلياً قبل إنشاء حجز الإهداء
+  const openPayment = async () => {
     if (!agreed) { toast("⚠ يرجى الموافقة على الشروط"); return }
     if (!recipientName || !recipientPhone || !date || !time) { toast("⚠ أكملي كل البيانات"); return }
-    setSaving(true)
     const { data: { session } } = await supabase.auth.getSession()
-    const serviceNames = selectedServices.map(s => s.n).join("، ")
-    const { error } = await supabase.from('bookings').insert([{
-      salon_id: salon.id,
-      client_name: recipientName,
-      client_phone: recipientPhone,
-      appointment_date: date,
-      appointment_time: time,
-      total_amount: totalAmount,
-      deposit_amount: totalAmount,        // دفعت المبلغ الكامل
-      platform_fee: platformFee,
-      salon_amount: salonNet,
-      status: 'confirmed',
-      user_id: session?.user?.id || null,
-      service_name: serviceNames,
-      booking_type: 'love_gift',
-      payment_status: 'pending',
-    }])
-    setSaving(false)
-    if (error) {
-      if (error.message?.includes("duplicate key") || error.code === "23505") {
-        toast("⚠ تم حجز هذا الوقت للتو — يرجى اختيار وقت آخر")
-        setTime("")
-        refreshBookedTimes()
-      } else {
-        toast("⚠ حدث خطأ: " + error.message)
-      }
-      return
-    }
+    setUserId(session?.user?.id || null)
+    setShowPayment(true)
+  }
+
+  // يُستدعى بعد نجاح الدفع والتحقق منه فعلياً عبر Edge Function
+  const handlePaymentSuccess = () => {
+    setShowPayment(false)
     // رسالة واتساب للصالون
     if (salon?.wa) {
       const waNum = (salon.wa).replace(/^0/, "").replace(/[^0-9]/g, "")
@@ -6290,12 +6388,37 @@ function GiftPage({ setScreen, salon, setSalon }) {
               <span style={{ fontSize:12, color:T.inkSoft, lineHeight:1.6 }}>أوافق أن المبلغ يُدفع كاملاً الآن ولا يُسترجع إلا حسب سياسة الإلغاء</span>
             </label>
 
-            <PBtn full disabled={saving} onClick={confirm}>
-              {saving ? "...جارٍ التأكيد" : `💝 تأكيد ودفع ${totalAmount} ر.س`}
+            <PBtn full onClick={openPayment}>
+              💝 الدفع وتأكيد الإهداء {totalAmount} ر.س
             </PBtn>
           </div>
         )}
       </div>
+
+      {showPayment && (
+        <MoyasarPaymentModal
+          amount={totalAmount}
+          description={`إهداء محبة — ${serviceNames} — ${salon.name}`}
+          toast={toast}
+          onClose={() => setShowPayment(false)}
+          bookingFields={{
+            salon_id: salon.id,
+            client_name: recipientName,
+            client_phone: recipientPhone,
+            appointment_date: date,
+            appointment_time: time,
+            total_amount: totalAmount,
+            deposit_amount: totalAmount,
+            platform_fee: platformFee,
+            salon_amount: salonNet,
+            status: 'confirmed',
+            user_id: userId,
+            service_name: serviceNames,
+            booking_type: 'love_gift',
+          }}
+          onSuccess={handlePaymentSuccess}
+        />
+      )}
     </div>
   )
 }
