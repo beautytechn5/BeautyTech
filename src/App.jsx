@@ -51,12 +51,12 @@ function Card({ children, style }) {
    تحمّل نموذج ميسر الرسمي (الكارت بياناته ما تلمس موقعنا أبداً)
    بعد نجاح الدفع، تستدعي Edge Function للتحقق والحفظ الآمن
 ══════════════════════════════════════════ */
-function MoyasarPaymentModal({ amount, description, bookingFields, clientId, walletAmount, onSuccess, onClose, toast }) {
+function MoyasarPaymentModal({ amount, description, bookingFields, subscriptionFields, clientId, walletAmount, onSuccess, onClose, toast }) {
   const [loaded, setLoaded] = useState(false)
   const [verifying, setVerifying] = useState(false)
   const [formId] = useState(() => "mysr-form-" + Math.random().toString(36).slice(2, 9))
   const finalAmount = Math.max(0, amount - (walletAmount || 0))
-  const walletOnly = finalAmount <= 0 && (walletAmount || 0) > 0
+  const walletOnly = !subscriptionFields && finalAmount <= 0 && (walletAmount || 0) > 0
 
   useEffect(() => {
     // الحالة الخاصة: المحفظة تغطي المبلغ كامل — ما نحتاج ميسر إطلاقاً
@@ -116,18 +116,30 @@ function MoyasarPaymentModal({ amount, description, bookingFields, clientId, wal
         on_completed: async function (payment) {
           setVerifying(true)
           try {
+            const payload = subscriptionFields
+              ? {
+                  payment_id: payment.id,
+                  subscription_data: {
+                    expected_amount: Math.round(finalAmount * 100),
+                    email: subscriptionFields.email,
+                    password: subscriptionFields.password,
+                    owner_name: subscriptionFields.owner_name,
+                    salon_fields: subscriptionFields.salon_fields,
+                  },
+                }
+              : {
+                  payment_id: payment.id,
+                  client_id: clientId,
+                  wallet_amount: walletAmount || 0,
+                  booking_data: {
+                    expected_amount: Math.round(finalAmount * 100),
+                    booking_fields: bookingFields,
+                  },
+                }
             const res = await fetch(VERIFY_PAYMENT_URL, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                payment_id: payment.id,
-                client_id: clientId,
-                wallet_amount: walletAmount || 0,
-                booking_data: {
-                  expected_amount: Math.round(finalAmount * 100),
-                  booking_fields: bookingFields,
-                },
-              }),
+              body: JSON.stringify(payload),
             })
             const result = await res.json()
             setVerifying(false)
@@ -135,7 +147,7 @@ function MoyasarPaymentModal({ amount, description, bookingFields, clientId, wal
               toast("⚠ " + (result.error || "تعذّر تأكيد الدفع"))
               return
             }
-            onSuccess(result.booking)
+            onSuccess(subscriptionFields ? result.salon : result.booking)
           } catch (e) {
             setVerifying(false)
             toast("⚠ حدث خطأ بالتحقق من الدفع: " + e.message)
@@ -2046,6 +2058,7 @@ function OwnerRegister({ setScreen }) {
   const [savingServices, setSavingServices] = useState(false)
   const [billing, setBilling] = useState("monthly")
   const [skipTrial, setSkipTrial] = useState(false)
+  const [showSubPayment, setShowSubPayment] = useState(false)
   const [form, setForm] = useState({ name:"", owner:"", phone:"", email:"", city:"", pass:"", confirm:"" })
   const set = k => e => setForm(f => ({ ...f, [k]:e.target.value }))
 
@@ -2063,6 +2076,13 @@ function OwnerRegister({ setScreen }) {
 
   const submit = async () => {
     if (!agreed) return toast("⚠ يرجى الموافقة على الشروط")
+
+    // لو اختارت البدء بدون تجربة، تفتح بوابة الدفع الفعلية بدل الإنشاء المباشر
+    if (skipTrial) {
+      setShowSubPayment(true)
+      return
+    }
+
     setLoading(true)
     // إنشاء حساب Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -2090,14 +2110,27 @@ function OwnerRegister({ setScreen }) {
       city: form.city,
       package: pkg,
       billing: billing,
-      skip_trial: skipTrial,
-      trial_end: skipTrial ? null : trialEnd.toISOString(),
+      skip_trial: false,
+      trial_end: trialEnd.toISOString(),
       visible: false,   // مخفي عن العميلات حتى تتأكد المنصة من دفع رسوم التأسيس
       referred_by_code: sessionStorage.getItem("referral_code") || null,
     }]).select()
     setLoading(false)
     if (error) { toast("⚠ حدث خطأ: " + error.message); return }
     if (data && data[0]) setSalonId(data[0].id)
+    setStep(3)
+  }
+
+  // المبلغ المطلوب: قيمة الباقة (شهري أو سنوي) + رسوم التأسيس 600 ر.س
+  const selectedPkgPrice = PKGS.find(p => p.id === pkg)?.price || 0
+  const subscriptionAmount = (billing === "yearly" ? selectedPkgPrice * 11 : selectedPkgPrice) + 600
+
+  // يُستدعى بعد نجاح الدفع والتحقق منه فعلياً — الصالون أصبح مفعّلاً وظاهراً فوراً
+  const handleSubPaymentSuccess = (salon) => {
+    setShowSubPayment(false)
+    setLoading(false)
+    if (salon?.id) setSalonId(salon.id)
+    toast("✅ تم الدفع وتفعيل حسابك فوراً!")
     setStep(3)
   }
 
@@ -2192,12 +2225,21 @@ function OwnerRegister({ setScreen }) {
       <div style={{ textAlign:"center", maxWidth:340 }}>
         <div style={{ fontSize:60, marginBottom:14 }}>🎉</div>
         <h2 style={{ fontSize:22, fontWeight:900, color:T.ink, marginBottom:10 }}>صالونك جاهز!</h2>
-        <div style={{ background:T.greenL, borderRadius:14, padding:"12px 16px", marginBottom:16, textAlign:"right" }}>
-          <div style={{ fontSize:13, fontWeight:700, color:T.green, marginBottom:4 }}>🎁 تجربة مجانية 14 يوم مفعّلة</div>
-          <div style={{ fontSize:11, color:T.inkSoft }}>مرة واحدة فقط لكل صالون</div>
-        </div>
+        {skipTrial ? (
+          <div style={{ background:T.greenL, borderRadius:14, padding:"12px 16px", marginBottom:16, textAlign:"right" }}>
+            <div style={{ fontSize:13, fontWeight:700, color:T.green, marginBottom:4 }}>✅ تم الدفع وتفعيل حسابك بالكامل</div>
+            <div style={{ fontSize:11, color:T.inkSoft }}>صالونك ظاهر للعميلات الآن — يمكنك البدء باستقبال الحجوزات فوراً</div>
+          </div>
+        ) : (
+          <div style={{ background:T.greenL, borderRadius:14, padding:"12px 16px", marginBottom:16, textAlign:"right" }}>
+            <div style={{ fontSize:13, fontWeight:700, color:T.green, marginBottom:4 }}>🎁 تجربة مجانية 14 يوم مفعّلة</div>
+            <div style={{ fontSize:11, color:T.inkSoft }}>مرة واحدة فقط لكل صالون</div>
+          </div>
+        )}
         <p style={{ fontSize:14, color:T.inkSoft, lineHeight:1.8, marginBottom:26 }}>
-          سيتواصل فريقنا معكِ خلال 24 ساعة لإتمام إعداد الحساب ودفع رسوم التأسيس (600 ر.س).
+          {skipTrial
+            ? "يمكنك الدخول للوحة التحكم الآن وإضافة خدماتك وفريقك."
+            : "سيتواصل فريقنا معكِ خلال 24 ساعة لإتمام إعداد الحساب ودفع رسوم التأسيس (600 ر.س)."}
         </p>
         <PBtn full onClick={() => setScreen("owner-login")}>الذهاب لتسجيل الدخول</PBtn>
       </div>
@@ -2326,10 +2368,10 @@ function OwnerRegister({ setScreen }) {
               <div style={{ fontSize:20 }}>⚡</div>
               <div style={{ flex:1 }}>
                 <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>تبين تبدأين الآن بدون تجربة؟</div>
-                <div style={{ fontSize:11, color:T.inkSoft }}>ادفعي رسوم التأسيس (600 ر.س) وابدأي فوراً</div>
+                <div style={{ fontSize:11, color:T.inkSoft }}>دفع فعلي فوري: {selectedPkgPrice * (billing === "yearly" ? 11 : 1)} ر.س ({billing === "yearly" ? "سنوي" : "شهري"}) + 600 ر.س رسوم تأسيس = {subscriptionAmount} ر.س</div>
               </div>
-              <button onClick={() => setSkipTrial(true)}
-                style={{ padding:"7px 14px", borderRadius:20, border:"none", background:skipTrial ? T.gold : T.white, color:skipTrial ? T.white : T.gold, fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif", border:`1px solid ${T.gold}` }}>
+              <button onClick={() => setSkipTrial(!skipTrial)}
+                style={{ padding:"7px 14px", borderRadius:20, border:`1px solid ${T.gold}`, background:skipTrial ? T.gold : T.white, color:skipTrial ? T.white : T.gold, fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
                 {skipTrial ? "✓ محدد" : "اختاري"}
               </button>
             </div>
@@ -2358,11 +2400,36 @@ function OwnerRegister({ setScreen }) {
             </label>
 
             <PBtn full disabled={loading} onClick={submit}>
-              {loading ? "...جاري التسجيل" : "🎁 ابدأي تجربتك المجانية — 14 يوم"}
+              {loading ? "...جاري التسجيل" : skipTrial ? `💳 الدفع وتفعيل الحساب فوراً — ${subscriptionAmount} ر.س` : "🎁 ابدأي تجربتك المجانية — 14 يوم"}
             </PBtn>
           </div>
         )}
       </div>
+
+      {showSubPayment && (
+        <MoyasarPaymentModal
+          amount={subscriptionAmount}
+          description={`اشتراك ${PKGS.find(p=>p.id===pkg)?.name||""} (${billing==="yearly"?"سنوي":"شهري"}) + رسوم تأسيس — ${form.name}`}
+          toast={toast}
+          onClose={() => setShowSubPayment(false)}
+          subscriptionFields={{
+            email: form.email,
+            password: form.pass,
+            owner_name: form.owner,
+            salon_fields: {
+              name: form.name,
+              owner_name: form.owner,
+              phone: form.phone,
+              email: form.email,
+              city: form.city,
+              package: pkg,
+              billing: billing,
+              referred_by_code: sessionStorage.getItem("referral_code") || null,
+            },
+          }}
+          onSuccess={handleSubPaymentSuccess}
+        />
+      )}
     </div>
   )
 }
@@ -8399,11 +8466,10 @@ export default function App() {
   const [splash, setSplash] = useState(true)
   const [screen, setScreen] = useState("client-home")
 
-  // تحديث الكاش عند أول تحميل
+  // تحديث الكاش عند أول تحميل بكل جلسة جديدة (مرة واحدة فقط، لا يتكرر بكل صفحة بنفس الجلسة)
   useEffect(() => {
-    const v = "v" + "20260618"
-    if (localStorage.getItem("app_version") !== v) {
-      localStorage.setItem("app_version", v)
+    if (!sessionStorage.getItem("cache_cleared_this_session")) {
+      sessionStorage.setItem("cache_cleared_this_session", "1")
       if ("caches" in window) {
         caches.keys().then(keys => keys.forEach(k => caches.delete(k)))
       }
