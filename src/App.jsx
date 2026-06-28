@@ -5217,36 +5217,47 @@ function OwnerReport({ salonInfo }) {
     setLoading(false)
   }
 
-  // حسابات
+  // حسابات — مفصولة بدقة حسب نوع الحجز (الحجز اليدوي عكس الاتجاه)
   const completed = bookings.filter(b => b.status === "completed")
-  const totalRevenue = completed.reduce((s,b) => s + (b.total_amount||0), 0)
-  const totalDeposits = completed.reduce((s,b) => s + (b.deposit_amount||0), 0)
-  const totalFees = completed.reduce((s,b) => s + (b.platform_fee || Math.round((b.total_amount||0)*0.10)), 0)
-  const totalNet = totalDeposits - totalFees
+  const onlineCompleted = completed.filter(b => b.booking_type !== "manual")
+  const manualCompleted = completed.filter(b => b.booking_type === "manual")
+
+  const totalRevenue = onlineCompleted.reduce((s,b) => s + (b.total_amount||0), 0)
+  const totalDeposits = onlineCompleted.reduce((s,b) => s + (calcCommission(b).depositPaid || 0), 0)
+  const totalFees = onlineCompleted.reduce((s,b) => s + calcCommission(b).fee, 0)
+  const totalNet = onlineCompleted.reduce((s,b) => s + calcCommission(b).salonGet, 0)
+  const manualCashTotal = manualCompleted.reduce((s,b) => s + (b.total_amount||0), 0)
+  const manualOwedTotal = manualCompleted.reduce((s,b) => s + calcCommission(b).fee, 0)
   const pending = bookings.filter(b => b.status === "pending" || b.status === "confirmed").length
   const cancelled = bookings.filter(b => b.status === "cancelled").length
 
   // تصدير CSV
   const exportCSV = () => {
     const rows = [
-      ["التاريخ","الوقت","العميلة","الجوال","الخدمة","النوع","قيمة الخدمة","العربون","عمولة المنصة","الصافي","الحالة","حالة التحويل"],
-      ...bookings.map(b => [
-        b.appointment_date || "",
-        b.appointment_time || "",
-        b.client_name || "",
-        b.client_phone || "",
-        b.service_name || "",
-        b.booking_type === "offer" ? "عرض" : b.booking_type === "package" ? "باقة" : "خدمة",
-        b.total_amount || 0,
-        b.deposit_amount || 0,
-        b.platform_fee || Math.round((b.total_amount||0)*0.10),
-        (b.deposit_amount||0) - (b.platform_fee||Math.round((b.total_amount||0)*0.10)),
-        b.status === "completed" ? "مكتمل" : b.status === "cancelled" ? "ملغي" : b.status === "confirmed" ? "مؤكد" : "انتظار",
-        b.payment_status === "settled" ? "محوَّل" : "معلق",
-      ])
+      ["التاريخ","الوقت","العميلة","الجوال","الخدمة","النوع","قيمة الخدمة","العربون/المدفوع","نسبة العمولة","قيمة العمولة","الصافي/المستحق","الاتجاه","الحالة","حالة التحويل"],
+      ...bookings.map(b => {
+        const isManualType = b.booking_type === "manual"
+        const { fee, salonGet, depositPaid } = calcCommission(b)
+        return [
+          b.appointment_date || "",
+          b.appointment_time || "",
+          b.client_name || "",
+          b.client_phone || "",
+          b.service_name || "",
+          b.booking_type === "love_gift" ? "إهداء محبة" : b.booking_type === "manual" ? "حجز يدوي" : b.booking_type === "offer" ? "عرض" : b.booking_type === "package" ? "باقة" : "خدمة",
+          b.total_amount || 0,
+          depositPaid || 0,
+          isManualType ? "3%" : "10%",
+          fee,
+          salonGet,
+          isManualType ? "مستحق عليك للمنصة" : "مستحق لك",
+          b.status === "completed" ? "مكتمل" : b.status === "cancelled" ? "ملغي" : b.status === "confirmed" ? "مؤكد" : "انتظار",
+          b.payment_status === "settled" ? (isManualType ? "محصّلة" : "محوَّل") : "معلق",
+        ]
+      })
     ]
     const csv = rows.map(r => r.join(",")).join("\n")
-    const blob = new Blob(["" + csv], { type:"text/csv;charset=utf-8" })
+    const blob = new Blob(["\uFEFF" + csv], { type:"text/csv;charset=utf-8" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
@@ -5290,36 +5301,44 @@ function OwnerReport({ salonInfo }) {
         </div>
         <div class="summary">
           <div class="summary-card"><div class="value">${bookings.length}</div><div class="label">إجمالي الحجوزات</div></div>
-          <div class="summary-card"><div class="value">${totalRevenue.toLocaleString()} ر.س</div><div class="label">إجمالي المبيعات</div></div>
-          <div class="summary-card"><div class="value">${totalFees.toLocaleString()} ر.س</div><div class="label">عمولة المنصة (10%)</div></div>
-          <div class="summary-card"><div class="value" style="color:green">${totalNet.toLocaleString()} ر.س</div><div class="label">صافي المستحقات</div></div>
+          <div class="summary-card"><div class="value">${totalRevenue.toLocaleString()} ر.س</div><div class="label">مبيعات أونلاين/إهداء</div></div>
+          <div class="summary-card"><div class="value">${totalFees.toLocaleString()} ر.س</div><div class="label">عمولة المنصة منها (10%)</div></div>
+          <div class="summary-card"><div class="value" style="color:green">${totalNet.toLocaleString()} ر.س</div><div class="label">صافي مستحقاتك</div></div>
         </div>
+        ${manualCompleted.length > 0 ? `
+        <div class="summary" style="grid-template-columns: repeat(3,1fr);">
+          <div class="summary-card" style="border-color:#90CAF9;"><div class="value" style="color:#1976D2">${manualCompleted.length}</div><div class="label">حجوزات يدوية</div></div>
+          <div class="summary-card" style="border-color:#90CAF9;"><div class="value" style="color:#1976D2">${manualCashTotal.toLocaleString()} ر.س</div><div class="label">استلمتها كاش</div></div>
+          <div class="summary-card" style="border-color:#90CAF9;"><div class="value" style="color:red">${manualOwedTotal.toLocaleString()} ر.س</div><div class="label">مستحق عليك للمنصة (3%)</div></div>
+        </div>` : ""}
         <table>
           <thead>
-            <tr><th>التاريخ</th><th>الوقت</th><th>العميلة</th><th>الخدمة</th><th>قيمة الخدمة</th><th>العربون</th><th>عمولة المنصة</th><th>الصافي</th><th>الحالة</th></tr>
+            <tr><th>التاريخ</th><th>الوقت</th><th>العميلة</th><th>النوع</th><th>الخدمة</th><th>قيمة الخدمة</th><th>العربون/المدفوع</th><th>العمولة</th><th>الصافي/المستحق</th><th>الحالة</th></tr>
           </thead>
           <tbody>
             ${bookings.map(b => {
-              const fee = b.platform_fee || Math.round((b.total_amount||0)*0.10)
-              const net = (b.deposit_amount||0) - fee
+              const isManualType = b.booking_type === "manual"
+              const { fee, salonGet, depositPaid } = calcCommission(b)
+              const typeLabel = b.booking_type === "love_gift" ? "💝 إهداء" : isManualType ? "🖐️ يدوي" : "✂️ خدمة"
               const statusClass = b.status==="completed"?"completed":b.status==="cancelled"?"cancelled":"pending"
               const statusLabel = b.status==="completed"?"✅ مكتمل":b.status==="cancelled"?"❌ ملغي":b.status==="confirmed"?"✓ مؤكد":"⏳ انتظار"
               return `<tr>
                 <td>${b.appointment_date||""}</td>
                 <td>${b.appointment_time||""}</td>
                 <td>${b.client_name||""}</td>
+                <td>${typeLabel}</td>
                 <td>${b.service_name||""}</td>
                 <td>${b.total_amount||0} ر.س</td>
-                <td>${b.deposit_amount||0} ر.س</td>
-                <td style="color:red">${fee} ر.س</td>
-                <td style="color:green;font-weight:bold">${net} ر.س</td>
+                <td>${depositPaid||0} ر.س</td>
+                <td style="color:${isManualType ? '#1976D2' : 'red'}">${fee} ر.س ${isManualType ? '(عليك)' : ''}</td>
+                <td style="color:green;font-weight:bold">${salonGet} ر.س</td>
                 <td class="${statusClass}">${statusLabel}</td>
               </tr>`
             }).join("")}
           </tbody>
           <tfoot>
             <tr style="background:#A8705A;color:white;font-weight:bold">
-              <td colspan="4">الإجمالي</td>
+              <td colspan="5">الإجمالي (أونلاين/إهداء فقط)</td>
               <td>${totalRevenue.toLocaleString()} ر.س</td>
               <td>${totalDeposits.toLocaleString()} ر.س</td>
               <td>${totalFees.toLocaleString()} ر.س</td>
@@ -5392,12 +5411,18 @@ function OwnerReport({ salonInfo }) {
         </div>
         <div style={{ background:T.white, borderRadius:14, padding:"14px", textAlign:"center", border:`1px solid ${T.creamDk}` }}>
           <div style={{ fontSize:20, fontWeight:900, color:"#C62828" }}>{totalFees.toLocaleString()}</div>
-          <div style={{ fontSize:10, color:T.inkSoft, marginTop:3 }}>عمولة المنصة (10%)</div>
+          <div style={{ fontSize:10, color:T.inkSoft, marginTop:3 }}>عمولة المنصة منها (10%)</div>
         </div>
         <div style={{ background:`linear-gradient(135deg,#2E7D32,#1B5E20)`, borderRadius:14, padding:"14px", textAlign:"center" }}>
           <div style={{ fontSize:20, fontWeight:900, color:T.white }}>{totalNet.toLocaleString()}</div>
-          <div style={{ fontSize:10, color:"rgba(255,255,255,.8)", marginTop:3 }}>صافي مستحقاتك (ر.س)</div>
+          <div style={{ fontSize:10, color:"rgba(255,255,255,.8)", marginTop:3 }}>صافي مستحقاتك (أونلاين/إهداء)</div>
         </div>
+        {manualCompleted.length > 0 && (
+          <div style={{ background:"linear-gradient(135deg,#1976D2,#0D47A1)", borderRadius:14, padding:"14px", textAlign:"center", gridColumn:"span 2" }}>
+            <div style={{ fontSize:20, fontWeight:900, color:T.white }}>{manualOwedTotal.toLocaleString()} ر.س</div>
+            <div style={{ fontSize:10, color:"rgba(255,255,255,.85)", marginTop:3 }}>🖐️ مستحق عليك للمنصة من {manualCompleted.length} حجز يدوي (3% من {manualCashTotal.toLocaleString()} ر.س استلمتها كاش)</div>
+          </div>
+        )}
       </div>
 
       {/* أزرار التصدير */}
@@ -5418,15 +5443,17 @@ function OwnerReport({ salonInfo }) {
 
       <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
         {bookings.map(bk => {
-          const fee = bk.platform_fee || Math.round((bk.total_amount||0)*0.10)
-          const net = (bk.deposit_amount||0) - fee
+          const isManualType = bk.booking_type === "manual"
+          const { fee, salonGet, depositPaid } = calcCommission(bk)
           const st = STATUS_LABELS[bk.status] || STATUS_LABELS.pending
           return (
-            <div key={bk.id} style={{ background:T.white, borderRadius:12, padding:"12px 14px", border:`1px solid ${T.creamDk}` }}>
+            <div key={bk.id} style={{ background:T.white, borderRadius:12, padding:"12px 14px", border:`1px solid ${isManualType ? "#90CAF9" : T.creamDk}` }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
                 <div>
                   <span style={{ fontSize:13, fontWeight:700, color:T.ink }}>{bk.client_name}</span>
                   <span style={{ fontSize:11, color:T.inkSoft, marginRight:8 }}>{bk.appointment_date} · {bk.appointment_time}</span>
+                  {isManualType && <span style={{ fontSize:10, color:"#1976D2", fontWeight:700, marginRight:6 }}>🖐️ يدوي</span>}
+                  {bk.booking_type === "love_gift" && <span style={{ fontSize:10, color:"#C2185B", fontWeight:700, marginRight:6 }}>💝 إهداء</span>}
                 </div>
                 <span style={{ background:st.bg, color:st.color, fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>{st.label}</span>
               </div>
@@ -5434,9 +5461,9 @@ function OwnerReport({ salonInfo }) {
               <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:6 }}>
                 {[
                   ["الخدمة", (bk.total_amount||0)+" ر.س", T.ink],
-                  ["العربون", (bk.deposit_amount||0)+" ر.س", T.ink],
-                  ["العمولة", fee+" ر.س", "#C62828"],
-                  ["صافيك", net+" ر.س", "#2E7D32"],
+                  [isManualType ? "استلمت كاش" : "العربون", (isManualType ? bk.total_amount||0 : depositPaid||0)+" ر.س", T.ink],
+                  [isManualType ? "عمولة عليك (3%)" : "العمولة (10%)", fee+" ر.س", "#C62828"],
+                  [isManualType ? "صافٍ بعد العمولة" : "صافيك", salonGet+" ر.س", "#2E7D32"],
                 ].map(r => (
                   <div key={r[0]} style={{ background:T.cream, borderRadius:8, padding:"6px 8px", textAlign:"center" }}>
                     <div style={{ fontSize:12, fontWeight:700, color:r[2] }}>{r[1]}</div>
@@ -5468,9 +5495,14 @@ function DailyStatement({ salonId }) {
 
   if (todayBks.length === 0) return null
 
-  const todayDeposit = todayBks.reduce((s,b) => s + (b.deposit_amount||0), 0)
-  const todayFee     = todayBks.reduce((s,b) => s + (b.platform_fee || Math.round((b.total_amount||0)*0.10)), 0)
-  const todayNet     = todayBks.reduce((s,b) => s + (b.salon_net_amount || (b.deposit_amount||0) - (b.platform_fee||Math.round((b.total_amount||0)*0.10))), 0)
+  const onlineBks = todayBks.filter(b => b.booking_type !== "manual")
+  const manualBksToday = todayBks.filter(b => b.booking_type === "manual")
+
+  const todayDeposit = onlineBks.reduce((s,b) => s + (calcCommission(b).depositPaid || 0), 0)
+  const todayFee     = onlineBks.reduce((s,b) => s + calcCommission(b).fee, 0)
+  const todayNet     = onlineBks.reduce((s,b) => s + calcCommission(b).salonGet, 0)
+  const todayManualCash = manualBksToday.reduce((s,b) => s + (b.total_amount || 0), 0)
+  const todayManualOwed = manualBksToday.reduce((s,b) => s + calcCommission(b).fee, 0)
 
   return (
     <div style={{ background:`linear-gradient(135deg,#1B5E20,#2E7D32)`, borderRadius:14, padding:"14px 16px", marginBottom:16 }}>
@@ -5478,18 +5510,33 @@ function DailyStatement({ salonId }) {
         📊 كشف حساب اليوم — {today}
       </div>
       {[
-        ["إجمالي العربونات", todayDeposit + " ر.س"],
-        ["عمولة المنصة (10%)", todayFee + " ر.س"],
-        ["صافي مستحقاتك اليوم", todayNet + " ر.س"],
-        ["عدد الخدمات", todayBks.length + " خدمة"],
+        ["إجمالي المدفوعات (أونلاين/إهداء)", todayDeposit + " ر.س"],
+        ["عمولة المنصة منها", todayFee + " ر.س"],
+        ["صافي مستحقاتك منها", todayNet + " ر.س"],
+        ["عدد الحجوزات أونلاين/إهداء", onlineBks.length + ""],
       ].map(r => (
         <div key={r[0]} style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"4px 0", borderBottom:"1px solid rgba(255,255,255,.15)" }}>
           <span style={{ color:"rgba(255,255,255,.8)" }}>{r[0]}</span>
           <span style={{ fontWeight:700, color:T.white }}>{r[1]}</span>
         </div>
       ))}
+      {manualBksToday.length > 0 && (
+        <>
+          <div style={{ height:1, background:"rgba(255,255,255,.25)", margin:"8px 0" }} />
+          {[
+            ["🖐️ حجوزات يدوية اليوم", manualBksToday.length + ""],
+            ["مبلغ استلمته كاش", todayManualCash + " ر.س"],
+            ["مستحق عليك للمنصة (3%)", todayManualOwed + " ر.س"],
+          ].map(r => (
+            <div key={r[0]} style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"4px 0", borderBottom:"1px solid rgba(255,255,255,.15)" }}>
+              <span style={{ color:"rgba(255,255,255,.8)" }}>{r[0]}</span>
+              <span style={{ fontWeight:700, color:"#FFD54F" }}>{r[1]}</span>
+            </div>
+          ))}
+        </>
+      )}
       <div style={{ fontSize:10, color:"rgba(255,255,255,.6)", marginTop:8, textAlign:"center" }}>
-        سيُحوَّل {todayNet} ر.س لحسابك في نهاية اليوم
+        سيُحوَّل {todayNet} ر.س لحسابك{manualBksToday.length > 0 ? ` · وعليك تحويل ${todayManualOwed} ر.س للمنصة` : ""} في نهاية اليوم
       </div>
     </div>
   )
@@ -5560,7 +5607,7 @@ function OwnerFinance({ toast }) {
   return (
     <div>
       <div style={{ fontSize:16, fontWeight:800, color:T.ink, marginBottom:4 }}>💰 بياناتي المالية</div>
-      <div style={{ fontSize:11, color:T.inkSoft, marginBottom:16 }}>مستحقاتك بعد خصم عمولة المنصة (10%)</div>
+      <div style={{ fontSize:11, color:T.inkSoft, marginBottom:16 }}>أونلاين/إهداء: مستحقاتك بعد خصم 10% · يدوي: عليك تحويل 3% للمنصة</div>
 
       {/* ملخص مالي */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
@@ -5592,7 +5639,8 @@ function OwnerFinance({ toast }) {
         <div style={{ fontSize:11, color:T.inkSoft, lineHeight:2 }}>
           • <strong>خدمة عادية:</strong> العربون (30%) − عمولة المنصة (10% من الخدمة)<br/>
           • <strong>إهداء المحبة:</strong> المبلغ الكامل − عمولة المنصة (10%)<br/>
-          • مثال خدمة 200 ر.س: عربون 60 ر.س − عمولتي 20 ر.س = <strong style={{ color:T.green }}>40 ر.س تُحوَّل لك · والـ 140 ر.س تستلمها من العميلة مباشرة</strong>
+          • مثال خدمة 200 ر.س: عربون 60 ر.س − عمولتي 20 ر.س = <strong style={{ color:T.green }}>40 ر.س تُحوَّل لك · والـ 140 ر.س تستلمها من العميلة مباشرة</strong><br/>
+          • <strong>حجز يدوي (عميلة حاضرة بالصالون):</strong> تستلم المبلغ كامل كاش، وعليك تحويل 3% منه للمنصة — <strong style={{ color:"#1976D2" }}>عكس الاتجاه</strong>
         </div>
       </div>
 
@@ -7211,20 +7259,26 @@ function AdminCommissions() {
 
   const exportCSV = () => {
     const rows = [
-      ["التاريخ","الصالون","العميلة","الخدمة","النوع","قيمة الخدمة","عمولة المنصة (10%)","حالة التحويل"],
-      ...bookings.map(b => [
-        b.appointment_date||"",
-        b.salons?.name||"",
-        b.client_name||"",
-        b.service_name||"",
-        b.booking_type==="love_gift"?"💝 إهداء محبة":b.booking_type==="voucher"?"🎟️ قسيمة":"✂️ خدمة",
-        b.total_amount||0,
-        b.platform_fee||0,
-        b.payment_status==="settled"?"محوَّل":"معلق",
-      ])
+      ["التاريخ","الصالون","العميلة","الخدمة","النوع","قيمة الخدمة","نسبة العمولة","قيمة العمولة","الاتجاه","حالة التحويل"],
+      ...bookings.map(b => {
+        const isManualType = b.booking_type === "manual"
+        const { fee } = calcCommission(b)
+        return [
+          b.appointment_date||"",
+          b.salons?.name||"",
+          b.client_name||"",
+          b.service_name||"",
+          b.booking_type==="love_gift"?"💝 إهداء محبة":b.booking_type==="manual"?"🖐️ حجز يدوي":b.booking_type==="voucher"?"🎟️ قسيمة":"✂️ خدمة",
+          b.total_amount||0,
+          isManualType ? "3%" : "10%",
+          fee,
+          isManualType ? "مستحقة عليك من الصالون" : "مستحقة لك",
+          b.payment_status==="settled" ? (isManualType ? "محصّلة" : "محوَّلة") : "معلقة",
+        ]
+      })
     ]
     const csv = rows.map(r => r.join(",")).join("\n")
-    const blob = new Blob(["" + csv], { type:"text/csv;charset=utf-8" })
+    const blob = new Blob(["\uFEFF" + csv], { type:"text/csv;charset=utf-8" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
@@ -7236,7 +7290,7 @@ function AdminCommissions() {
   return (
     <div>
       <div style={{ fontSize:16, fontWeight:800, color:T.ink, marginBottom:4 }}>💸 تفاصيل عمولات المنصة</div>
-      <div style={{ fontSize:11, color:T.inkSoft, marginBottom:16 }}>10% من قيمة كل خدمة مكتملة</div>
+      <div style={{ fontSize:11, color:T.inkSoft, marginBottom:16 }}>أونلاين/إهداء: 10% مستحقة لك · يدوي: 3% مستحقة عليك من الصالون</div>
 
       {/* ملخص */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
