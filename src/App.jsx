@@ -51,12 +51,45 @@ function Card({ children, style }) {
    تحمّل نموذج ميسر الرسمي (الكارت بياناته ما تلمس موقعنا أبداً)
    بعد نجاح الدفع، تستدعي Edge Function للتحقق والحفظ الآمن
 ══════════════════════════════════════════ */
-function MoyasarPaymentModal({ amount, description, bookingFields, onSuccess, onClose, toast }) {
+function MoyasarPaymentModal({ amount, description, bookingFields, clientId, walletAmount, onSuccess, onClose, toast }) {
   const [loaded, setLoaded] = useState(false)
   const [verifying, setVerifying] = useState(false)
   const [formId] = useState(() => "mysr-form-" + Math.random().toString(36).slice(2, 9))
+  const finalAmount = Math.max(0, amount - (walletAmount || 0))
+  const walletOnly = finalAmount <= 0 && (walletAmount || 0) > 0
 
   useEffect(() => {
+    // الحالة الخاصة: المحفظة تغطي المبلغ كامل — ما نحتاج ميسر إطلاقاً
+    if (walletOnly) {
+      const submitWalletOnly = async () => {
+        setVerifying(true)
+        try {
+          const res = await fetch(VERIFY_PAYMENT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              wallet_only: true,
+              client_id: clientId,
+              wallet_amount: walletAmount,
+              booking_data: { booking_fields: bookingFields },
+            }),
+          })
+          const result = await res.json()
+          setVerifying(false)
+          if (!res.ok || result.error) {
+            toast("⚠ " + (result.error || "تعذّر إتمام الحجز من المحفظة"))
+            return
+          }
+          onSuccess(result.booking)
+        } catch (e) {
+          setVerifying(false)
+          toast("⚠ حدث خطأ: " + e.message)
+        }
+      }
+      submitWalletOnly()
+      return
+    }
+
     // تحميل سكربت ومكتبة ميسر مرة واحدة فقط
     const loadMoyasar = () => {
       if (window.Moyasar) { initForm(); return }
@@ -73,7 +106,7 @@ function MoyasarPaymentModal({ amount, description, bookingFields, onSuccess, on
     const initForm = () => {
       window.Moyasar.init({
         element: `.${formId}`,
-        amount: Math.round(amount * 100), // بالهللات
+        amount: Math.round(finalAmount * 100), // بالهللات — بعد خصم المحفظة لو طُبِّقت
         currency: 'SAR',
         description,
         publishable_api_key: MOYASAR_PUBLISHABLE_KEY,
@@ -88,8 +121,10 @@ function MoyasarPaymentModal({ amount, description, bookingFields, onSuccess, on
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 payment_id: payment.id,
+                client_id: clientId,
+                wallet_amount: walletAmount || 0,
                 booking_data: {
-                  expected_amount: Math.round(amount * 100),
+                  expected_amount: Math.round(finalAmount * 100),
                   booking_fields: bookingFields,
                 },
               }),
@@ -121,16 +156,19 @@ function MoyasarPaymentModal({ amount, description, bookingFields, onSuccess, on
           {!verifying && <button onClick={onClose} style={{ width:30, height:30, borderRadius:"50%", border:"none", background:T.cream, cursor:"pointer" }}>✕</button>}
         </div>
         <div style={{ background:T.goldPale, borderRadius:10, padding:"10px 14px", marginBottom:14, textAlign:"center" }}>
-          <div style={{ fontSize:11, color:T.inkSoft }}>المبلغ المطلوب</div>
-          <div style={{ fontSize:22, fontWeight:900, color:T.gold }}>{amount} ر.س</div>
+          {walletAmount > 0 && (
+            <div style={{ fontSize:11, color:T.gold, marginBottom:4 }}>💰 مخصوم من محفظتك: {walletAmount} ر.س</div>
+          )}
+          <div style={{ fontSize:11, color:T.inkSoft }}>{walletOnly ? "المبلغ مدفوع بالكامل من محفظتك" : "المبلغ المطلوب بالبطاقة"}</div>
+          <div style={{ fontSize:22, fontWeight:900, color:T.gold }}>{walletOnly ? "0" : finalAmount} ر.س</div>
         </div>
         {verifying && (
           <div style={{ textAlign:"center", padding:30 }}>
-            <div style={{ fontSize:14, color:T.inkSoft }}>...جارٍ تأكيد الدفع وحفظ حجزك</div>
+            <div style={{ fontSize:14, color:T.inkSoft }}>...جارٍ {walletOnly ? "تأكيد الحجز من المحفظة" : "تأكيد الدفع وحفظ حجزك"}</div>
           </div>
         )}
-        <div className={formId} style={{ display: verifying ? "none" : "block" }} />
-        {!loaded && !verifying && (
+        {!walletOnly && <div className={formId} style={{ display: verifying ? "none" : "block" }} />}
+        {!walletOnly && !loaded && !verifying && (
           <div style={{ textAlign:"center", padding:20, color:T.inkSoft, fontSize:13 }}>...جارٍ تحميل نموذج الدفع</div>
         )}
         <div style={{ fontSize:10, color:T.inkMuted, textAlign:"center", marginTop:10 }}>
@@ -1260,6 +1298,57 @@ function SalonDetailPage({ salon, setScreen, setSalon }) {
 /* ══════════════════════════════════════════
    📅 BOOKING
 ══════════════════════════════════════════ */
+/* ══════════════════════════════════════════
+   🔔 NOTIFY ME MODAL — إشعار توفر وقت عند موظفة معينة
+══════════════════════════════════════════ */
+function NotifyMeModal({ staff, salonId, defaultDate, defaultName, defaultPhone, toast, onClose }) {
+  const [name, setName] = useState(defaultName || "")
+  const [phone, setPhone] = useState(defaultPhone || "")
+  const [saving, setSaving] = useState(false)
+  const [sent, setSent] = useState(false)
+
+  const submit = async () => {
+    if (!name || !phone) { toast("⚠ أدخلي اسمك وجوالك"); return }
+    setSaving(true)
+    const { error } = await supabase.from('availability_requests').insert([{
+      staff_id: staff.id,
+      salon_id: salonId,
+      client_name: name,
+      client_phone: phone,
+      preferred_date: defaultDate || null,
+    }])
+    setSaving(false)
+    if (error) { toast("⚠ حدث خطأ: " + error.message); return }
+    setSent(true)
+  }
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:3500, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background:T.white, borderRadius:18, padding:"22px 18px", width:"100%", maxWidth:360 }}>
+        {sent ? (
+          <div style={{ textAlign:"center", padding:10 }}>
+            <div style={{ fontSize:40, marginBottom:10 }}>🔔</div>
+            <div style={{ fontSize:14, fontWeight:700, color:T.ink, marginBottom:6 }}>تم تسجيل طلبك!</div>
+            <p style={{ fontSize:12, color:T.inkSoft, marginBottom:16 }}>سيتواصل معك الصالون على واتساب فور توفر وقت عند {staff.name}</p>
+            <PBtn full onClick={onClose}>تمام</PBtn>
+          </div>
+        ) : (
+          <>
+            <div style={{ fontSize:15, fontWeight:800, color:T.ink, marginBottom:6 }}>🔔 إشعار توفر</div>
+            <p style={{ fontSize:12, color:T.inkSoft, marginBottom:14 }}>سنخبرك فور توفر وقت عند <strong style={{ color:T.ink }}>{staff.name}</strong></p>
+            <Field label="اسمك" value={name} onChange={e => setName(e.target.value)} placeholder="مثال: نورة" />
+            <Field label="رقم جوالك" type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="05xxxxxxxx" />
+            <div style={{ display:"flex", gap:8, marginTop:8 }}>
+              <OBtn onClick={onClose}>إلغاء</OBtn>
+              <div style={{ flex:1 }}><PBtn full disabled={saving} onClick={submit}>{saving ? "...جارٍ" : "تأكيد"}</PBtn></div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function BookingPage({ salon, setScreen }) {
   const toast = useToast()
   const [step, setStep] = useState(1)
@@ -1272,33 +1361,113 @@ function BookingPage({ salon, setScreen }) {
   const [termsOpen, setTermsOpen] = useState(false)
   const [bookedTimes, setBookedTimes] = useState([])
   const [showPayment, setShowPayment] = useState(false)
+  const [userId, setUserId] = useState(null)
+  const [wallet, setWallet] = useState({ total: 0, applied: 0 })
+  const [staffList, setStaffList] = useState([])
+  const [selectedStaff, setSelectedStaff] = useState(null)
+  const [staffBusyTimes, setStaffBusyTimes] = useState({}) // { staff_id: [times...] }
+  const [showNotifyMe, setShowNotifyMe] = useState(false)
   const deposit = svc ? Math.round(svc.p * 0.3) : 0
   const platformFee = svc ? Math.round(svc.p * 0.10) : 0
   const salonAmount = deposit - platformFee  // العربون - عمولة المنصة
   const ALL_SVC_TIMES = ["00:00","00:30","01:00","01:30","02:00","02:30","03:00","03:30","04:00","04:30","05:00","05:30","06:00","06:30","07:00","07:30","08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00","21:30","22:00","22:30","23:00","23:30"]
+  const DAY_NAMES_AR = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"]
+
+  // ساعات العمل المعتمدة: لو فيه موظفة محددة، نأخذ جدولها هي بالضبط — وإلا نرجع لجدول الخدمة العام
+  const getActiveHours = () => {
+    if (selectedStaff) {
+      const dayName = date ? DAY_NAMES_AR[new Date(date + "T00:00:00").getDay()] : null
+      if (dayName && selectedStaff.days && !selectedStaff.days.includes(dayName)) {
+        return [] // الموظفة لا تعمل بهذا اليوم إطلاقاً
+      }
+      return { from: selectedStaff.time_from || "09:00", to: selectedStaff.time_to || "18:00" }
+    }
+    if (svc && svc.timeFrom && svc.timeTo) return { from: svc.timeFrom, to: svc.timeTo }
+    return { from: "09:00", to: "18:00" }
+  }
+
   const getSvcTimes = () => {
-    if (!svc || !svc.timeFrom || !svc.timeTo) return ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30"]
-    const fi = ALL_SVC_TIMES.indexOf(svc.timeFrom)
-    const ti = ALL_SVC_TIMES.indexOf(svc.timeTo)
+    const hours = getActiveHours()
+    if (Array.isArray(hours)) return [] // يوم عطلة للموظفة
+    const fi = ALL_SVC_TIMES.indexOf(hours.from)
+    const ti = ALL_SVC_TIMES.indexOf(hours.to)
     if (fi < 0 || ti < 0) return ALL_SVC_TIMES
     return ALL_SVC_TIMES.slice(fi, ti + 1)
   }
   const TIMES = getSvcTimes().filter(t => !bookedTimes.includes(t))
 
-  // جلب الأوقات المحجوزة فعلياً (يدوي + أونلاين) لهذا الصالون والتاريخ — لمنع تكرار الحجز
+  // جلب الأوقات المحجوزة فعلياً — لو فيه موظفة محددة، فقط حجوزاتها هي (يدوي + أونلاين)
+  // لو ما فيه موظفة محددة بعد، نتحقق من كل حجوزات الصالون بهذا الوقت (احتياط)
   const refreshBookedTimes = () => {
     if (!date || !salon?.id) { setBookedTimes([]); return }
-    supabase.from('bookings').select('appointment_time')
+    let q = supabase.from('bookings').select('appointment_time')
       .eq('salon_id', salon.id)
       .eq('appointment_date', date)
       .in('status', ['pending', 'confirmed', 'completed'])
-      .then(({ data }) => setBookedTimes((data || []).map(b => b.appointment_time)))
+    if (selectedStaff) q = q.eq('staff_id', selectedStaff.id)
+    q.then(({ data }) => setBookedTimes((data || []).map(b => b.appointment_time)))
   }
-  useEffect(refreshBookedTimes, [date, salon?.id])
+  useEffect(refreshBookedTimes, [date, salon?.id, selectedStaff?.id])
+
+  // جلب فريق الصالون لاختيار الموظفة
+  useEffect(() => {
+    if (!salon?.id) return
+    supabase.from('staff').select('*').eq('salon_id', salon.id).eq('active', true)
+      .then(({ data }) => setStaffList(data || []))
+  }, [salon?.id])
+
+  // حساب أقرب وقت متاح لكل موظفة اليوم (لعرضه بجانب اسمها بقائمة الاختيار)
+  useEffect(() => {
+    if (!salon?.id || staffList.length === 0) return
+    const today = new Date().toISOString().split("T")[0]
+    supabase.from('bookings').select('staff_id, appointment_time')
+      .eq('salon_id', salon.id)
+      .eq('appointment_date', today)
+      .in('status', ['pending', 'confirmed', 'completed'])
+      .then(({ data }) => {
+        const busyByStaff = {}
+        ;(data || []).forEach(b => {
+          if (!b.staff_id) return
+          if (!busyByStaff[b.staff_id]) busyByStaff[b.staff_id] = []
+          busyByStaff[b.staff_id].push(b.appointment_time)
+        })
+        setStaffBusyTimes(busyByStaff)
+      })
+  }, [salon?.id, staffList])
+
+  const getNearestSlot = (staffMember) => {
+    const todayName = DAY_NAMES_AR[new Date().getDay()]
+    if (staffMember.days && !staffMember.days.includes(todayName)) return null
+    const fi = ALL_SVC_TIMES.indexOf(staffMember.time_from || "09:00")
+    const ti = ALL_SVC_TIMES.indexOf(staffMember.time_to || "18:00")
+    if (fi < 0 || ti < 0) return null
+    const dayTimes = ALL_SVC_TIMES.slice(fi, ti + 1)
+    const busy = staffBusyTimes[staffMember.id] || []
+    const nowStr = new Date().toTimeString().slice(0, 5)
+    return dayTimes.find(t => !busy.includes(t) && t >= nowStr) || null
+  }
 
   if (!salon) return null
 
-  const [userId, setUserId] = useState(null)
+  const [clientRecordId, setClientRecordId] = useState(null)
+
+  // جلب رصيد محفظة العميلة (لو مسجّلة دخول)
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return
+      setUserId(session.user.id)
+      supabase.from('clients').select('id').eq('email', session.user.email).then(({ data }) => {
+        if (!data?.[0]) return
+        setClientRecordId(data[0].id)
+        supabase.from('wallet_credits').select('remaining, expires_at')
+          .eq('client_id', data[0].id).gt('remaining', 0)
+          .then(({ data: credits }) => {
+            const valid = (credits || []).filter(c => !c.expires_at || new Date(c.expires_at) > new Date())
+            setWallet(w => ({ ...w, total: valid.reduce((s, c) => s + Number(c.remaining), 0) }))
+          })
+      })
+    })
+  }, [])
 
   // فتح بوابة الدفع — العربون يُدفع فعلياً قبل إنشاء الحجز
   const openPayment = async () => {
@@ -1391,7 +1560,36 @@ function BookingPage({ salon, setScreen }) {
         {/* Step 2 */}
         {step === 2 && (
           <div>
-            <Field label="التاريخ" type="date" value={date} onChange={e => setDate(e.target.value)} required />
+            <Field label="التاريخ" type="date" value={date} onChange={e => { setDate(e.target.value); setTime("") }} required />
+
+            {staffList.length > 0 && (
+              <div style={{ marginBottom:16 }}>
+                <label style={{ display:"block", fontSize:13, fontWeight:700, color:T.inkSoft, marginBottom:7 }}>اختاري الموظفة (اختياري)</label>
+                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                  <button onClick={() => { setSelectedStaff(null); setTime("") }}
+                    style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 12px", borderRadius:10, border:`1.5px solid ${!selectedStaff ? T.roseDp : T.creamDk}`, background:!selectedStaff ? T.roseL : T.white, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    <span style={{ fontSize:13, fontWeight:700, color:T.ink }}>بدون تحديد (أي موظفة متاحة)</span>
+                  </button>
+                  {staffList.map(st => {
+                    const nearest = getNearestSlot(st)
+                    return (
+                      <button key={st.id} onClick={() => { setSelectedStaff(st); setTime("") }}
+                        style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 12px", borderRadius:10, border:`1.5px solid ${selectedStaff?.id===st.id ? T.roseDp : T.creamDk}`, background:selectedStaff?.id===st.id ? T.roseL : T.white, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                        <div style={{ textAlign:"right" }}>
+                          <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{st.name}</div>
+                          {st.specialty && <div style={{ fontSize:11, color:T.inkSoft }}>{st.specialty}</div>}
+                          {st.rating > 0 && <div style={{ fontSize:10, color:T.gold }}>⭐ {st.rating.toFixed(1)} ({st.rating_count})</div>}
+                        </div>
+                        <div style={{ fontSize:10, color:nearest ? T.green : T.red, fontWeight:700 }}>
+                          {nearest ? `⚡ أقرب وقت: ${nearest}` : "مشغولة اليوم"}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             <div style={{ marginBottom:16 }}>
               <label style={{ display:"block", fontSize:13, fontWeight:700, color:T.inkSoft, marginBottom:7 }}>الوقت <span style={{ color:T.rose }}>*</span></label>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8 }}>
@@ -1402,8 +1600,16 @@ function BookingPage({ salon, setScreen }) {
                   </button>
                 ))}
                 {date && TIMES.length === 0 && (
-                  <div style={{ gridColumn:"span 4", textAlign:"center", padding:14, fontSize:12, color:T.red, background:T.redL, borderRadius:10 }}>
-                    لا توجد أوقات متاحة بهذا اليوم — جرّبي تاريخاً آخر
+                  <div style={{ gridColumn:"span 4" }}>
+                    <div style={{ textAlign:"center", padding:14, fontSize:12, color:T.red, background:T.redL, borderRadius:10, marginBottom:8 }}>
+                      {selectedStaff ? `${selectedStaff.name} لا تتوفر بهذا اليوم أو الأوقات كلها محجوزة` : "لا توجد أوقات متاحة بهذا اليوم — جرّبي تاريخاً آخر"}
+                    </div>
+                    {selectedStaff && (
+                      <button onClick={() => setShowNotifyMe(true)}
+                        style={{ width:"100%", padding:"10px", borderRadius:10, border:`1px solid ${T.gold}`, background:T.goldPale, color:T.gold, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                        🔔 أشعريني عند توفر وقت عند {selectedStaff.name}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -1447,6 +1653,26 @@ function BookingPage({ salon, setScreen }) {
                 <div style={{ fontSize:11, color:T.inkSoft }}>غير مسترد عند الإلغاء</div>
               </div>
             </div>
+
+            {wallet.total > 0 && (
+              <div style={{ background:T.goldPale, borderRadius:12, padding:"12px 14px", marginBottom:16, border:`1px solid ${T.goldL}` }}>
+                <label style={{ display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer" }}>
+                  <span style={{ fontSize:12, fontWeight:700, color:T.ink }}>
+                    💰 استخدام رصيد محفظتي ({wallet.total.toLocaleString()} ر.س)
+                  </span>
+                  <input type="checkbox" checked={wallet.applied > 0} onChange={e => {
+                    const useAmount = e.target.checked ? Math.min(wallet.total, deposit) : 0
+                    setWallet(w => ({ ...w, applied: useAmount }))
+                  }} style={{ accentColor:T.gold }} />
+                </label>
+                {wallet.applied > 0 && (
+                  <div style={{ fontSize:11, color:T.inkSoft, marginTop:6 }}>
+                    سيُخصم {wallet.applied} ر.س من محفظتك — المتبقي للدفع: <strong style={{ color:T.gold }}>{deposit - wallet.applied} ر.س</strong>
+                  </div>
+                )}
+              </div>
+            )}
+
             <label style={{ display:"flex", gap:10, alignItems:"flex-start", fontSize:13, color:T.inkSoft, lineHeight:1.6, marginBottom:18, cursor:"pointer" }}>
               <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} style={{ marginTop:3, accentColor:T.roseDp }} />
               أوافق على{" "}
@@ -1471,6 +1697,8 @@ function BookingPage({ salon, setScreen }) {
           amount={deposit}
           description={`عربون حجز — ${svc?.n || ""} — ${salon.name}`}
           toast={toast}
+          clientId={clientRecordId}
+          walletAmount={wallet.applied}
           onClose={() => setShowPayment(false)}
           bookingFields={{
             salon_id: salon.id || null,
@@ -1483,11 +1711,25 @@ function BookingPage({ salon, setScreen }) {
             status: 'pending',
             user_id: userId,
             service_name: svc ? svc.n : "",
+            staff_id: selectedStaff?.id || null,
+            staff_name: selectedStaff?.name || null,
             booking_type: svc?.isOffer ? (svc.offerType || "offer") : "service",
             platform_fee: platformFee,
             salon_amount: salonAmount,
           }}
           onSuccess={handlePaymentSuccess}
+        />
+      )}
+
+      {showNotifyMe && selectedStaff && (
+        <NotifyMeModal
+          staff={selectedStaff}
+          salonId={salon.id}
+          defaultDate={date}
+          defaultName={name}
+          defaultPhone={phone}
+          toast={toast}
+          onClose={() => setShowNotifyMe(false)}
         />
       )}
     </div>
@@ -1832,6 +2074,7 @@ function OwnerRegister({ setScreen }) {
       skip_trial: skipTrial,
       trial_end: skipTrial ? null : trialEnd.toISOString(),
       visible: false,   // مخفي عن العميلات حتى تتأكد المنصة من دفع رسوم التأسيس
+      referred_by_code: sessionStorage.getItem("referral_code") || null,
     }]).select()
     setLoading(false)
     if (error) { toast("⚠ حدث خطأ: " + error.message); return }
@@ -2339,18 +2582,33 @@ function ManualBookingModal({ salonId, onClose, onCreated, toast }) {
     load()
   }, [salonId])
 
-  // جلب الأوقات المحجوزة (يدوي + أونلاين) لهذا التاريخ — مشترك بين الكل
+  // جلب الأوقات المحجوزة — لو فيه موظفة محددة، فقط حجوزاتها هي (يدوي + أونلاين مدمجين)
   const refreshBookedTimes = () => {
     if (!date || !salonId) return
-    supabase.from('bookings').select('appointment_time')
+    let q = supabase.from('bookings').select('appointment_time')
       .eq('salon_id', salonId)
       .eq('appointment_date', date)
       .in('status', ['pending', 'confirmed', 'completed'])
-      .then(({ data }) => setBookedTimes((data || []).map(b => b.appointment_time)))
+    if (staffId) q = q.eq('staff_id', staffId)
+    q.then(({ data }) => setBookedTimes((data || []).map(b => b.appointment_time)))
   }
-  useEffect(refreshBookedTimes, [date, salonId])
+  useEffect(refreshBookedTimes, [date, salonId, staffId])
+
+  const DAY_NAMES_AR_MANUAL = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"]
 
   const getSvcTimes = () => {
+    const selectedStaffMember = staffList.find(st => st.id === staffId)
+    // لو فيه موظفة محددة، نستخدم جدولها هي بالضبط (أيام وساعات دوامها)
+    if (selectedStaffMember) {
+      const dayName = date ? DAY_NAMES_AR_MANUAL[new Date(date + "T00:00:00").getDay()] : null
+      if (dayName && selectedStaffMember.days && !selectedStaffMember.days.includes(dayName)) {
+        return [] // الموظفة لا تعمل بهذا اليوم
+      }
+      const fi = ALL_TIMES.indexOf(selectedStaffMember.time_from || "09:00")
+      const ti = ALL_TIMES.indexOf(selectedStaffMember.time_to || "18:00")
+      if (fi < 0 || ti < 0) return ALL_TIMES
+      return ALL_TIMES.slice(fi, ti + 1)
+    }
     if (!svc) return []
     const fi = ALL_TIMES.indexOf(svc.timeFrom)
     const ti = ALL_TIMES.indexOf(svc.timeTo)
@@ -2436,12 +2694,12 @@ function ManualBookingModal({ salonId, onClose, onCreated, toast }) {
               <>
                 <label style={{ fontSize:12, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:6 }}>مع الموظفة (اختياري)</label>
                 <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:14 }}>
-                  <button onClick={() => setStaffId("")}
+                  <button onClick={() => { setStaffId(""); setTime("") }}
                     style={{ display:"flex", justifyContent:"space-between", padding:"10px 12px", borderRadius:10, border:`1.5px solid ${!staffId ? T.roseDp : T.creamDk}`, background:!staffId ? T.roseL : T.white, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
                     <span style={{ fontSize:13, fontWeight:700, color:T.ink }}>بدون تحديد</span>
                   </button>
                   {staffList.map(st => (
-                    <button key={st.id} onClick={() => setStaffId(st.id)}
+                    <button key={st.id} onClick={() => { setStaffId(st.id); setTime("") }}
                       style={{ display:"flex", justifyContent:"space-between", padding:"10px 12px", borderRadius:10, border:`1.5px solid ${staffId===st.id ? T.roseDp : T.creamDk}`, background:staffId===st.id ? T.roseL : T.white, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
                       <span style={{ fontSize:13, fontWeight:700, color:T.ink }}>{st.name}</span>
                       {st.specialty && <span style={{ fontSize:11, color:T.inkSoft }}>{st.specialty}</span>}
@@ -4571,6 +4829,7 @@ function OwnerStaff({ toast }) {
                   {s.phone && <div style={{ fontSize:11, color:T.inkSoft }}>📞 {s.phone}</div>}
                   {s.days?.length > 0 && <div style={{ fontSize:11, color:T.inkSoft }}>{s.days.join(" · ")}</div>}
                   {s.time_from && <div style={{ fontSize:11, color:T.inkSoft }}>⏰ {s.time_from} — {s.time_to}</div>}
+                  {s.rating > 0 && <div style={{ fontSize:11, color:T.gold, marginTop:2 }}>⭐ {Number(s.rating).toFixed(1)} ({s.rating_count} تقييم)</div>}
                 </div>
               </div>
               <button onClick={() => deleteStaff(s.id)} style={{ width:28, height:28, borderRadius:"50%", border:`1px solid ${T.redL}`, background:T.white, color:T.red, fontSize:12, cursor:"pointer" }}>✕</button>
@@ -6469,7 +6728,20 @@ function ClientProfile({ setScreen }) {
   const [saving, setSaving] = useState(false)
   const [clientId, setClientId] = useState(null)
   const [focusF, setFocusF] = useState(null)
+  const [referralCode, setReferralCode] = useState("")
+  const [wallet, setWallet] = useState({ total: 0, credits: [] })
   const set = k => e => setForm(f => ({ ...f, [k]:e.target.value }))
+
+  const generateRefCode = () => "BT" + Math.random().toString(36).slice(2, 8).toUpperCase()
+
+  const loadWallet = async (cId) => {
+    const { data } = await supabase.from('wallet_credits')
+      .select('*').eq('client_id', cId)
+      .gt('remaining', 0)
+      .order('expires_at', { ascending: true })
+    const valid = (data || []).filter(c => !c.expires_at || new Date(c.expires_at) > new Date())
+    setWallet({ total: valid.reduce((s, c) => s + Number(c.remaining), 0), credits: valid })
+  }
 
   useEffect(() => {
     const load = async () => {
@@ -6484,6 +6756,15 @@ function ClientProfile({ setScreen }) {
           email: data[0].email || "",
           city: data[0].city || "",
         })
+        if (data[0].referral_code) {
+          setReferralCode(data[0].referral_code)
+        } else {
+          // أول زيارة — ننشئ كود إحالة فريد
+          const newCode = generateRefCode()
+          await supabase.from('clients').update({ referral_code: newCode }).eq('id', data[0].id)
+          setReferralCode(newCode)
+        }
+        loadWallet(data[0].id)
       } else {
         setForm(f => ({ ...f, email: session.user.email || "", name: session.user.user_metadata?.name || "" }))
       }
@@ -6533,6 +6814,42 @@ function ClientProfile({ setScreen }) {
           </div>
           <div style={{ fontSize:18, fontWeight:800, color:T.ink }}>{form.name || "اسمك هنا"}</div>
           <div style={{ fontSize:13, color:T.inkSoft }}>{form.email}</div>
+        </div>
+
+        {/* محفظتي */}
+        <div style={{ background:`linear-gradient(135deg,${T.gold},${T.gold2})`, borderRadius:16, padding:"16px 18px", marginBottom:16, textAlign:"center" }}>
+          <div style={{ fontSize:11, color:"rgba(255,255,255,.85)", marginBottom:4 }}>💰 رصيد محفظتي</div>
+          <div style={{ fontSize:26, fontWeight:900, color:T.white }}>{wallet.total.toLocaleString()} ر.س</div>
+          {wallet.credits.length > 0 && (
+            <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:4 }}>
+              {wallet.credits.map(c => (
+                <div key={c.id} style={{ fontSize:10, color:"rgba(255,255,255,.85)", display:"flex", justifyContent:"space-between" }}>
+                  <span>{Number(c.remaining).toLocaleString()} ر.س</span>
+                  <span>ينتهي: {c.expires_at ? new Date(c.expires_at).toLocaleDateString("ar-SA") : "لا ينتهي"}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* رابط الإحالة */}
+        <div style={{ background:T.white, borderRadius:16, padding:"16px 18px", marginBottom:16, border:`1.5px solid ${T.roseL}` }}>
+          <div style={{ fontSize:13, fontWeight:800, color:T.ink, marginBottom:6 }}>🎁 رشّحي صالوناً واكسبي 200 ر.س</div>
+          <p style={{ fontSize:11, color:T.inkSoft, lineHeight:1.7, marginBottom:12 }}>
+            شاركي رابطك مع أي صالون تعرفينه — لما يسجّل وتُفعَّل المنصة حسابه، تنزل لك 200 ر.س بمحفظتك تلقائياً.
+          </p>
+          <div style={{ display:"flex", gap:8 }}>
+            <div style={{ flex:1, background:T.cream, borderRadius:10, padding:"10px 12px", fontSize:12, color:T.inkSoft, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+              {window.location.origin}?ref={referralCode}
+            </div>
+            <button onClick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}?ref=${referralCode}`)
+                toast("✅ تم نسخ رابط الإحالة!")
+              }}
+              style={{ padding:"10px 16px", borderRadius:10, border:"none", background:T.roseDp, color:T.white, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+              📋 نسخ
+            </button>
+          </div>
         </div>
 
         <Card style={{ padding:18, marginBottom:14 }}>
@@ -7428,6 +7745,31 @@ function AdminSalonsList({ salonsList, onUpdate }) {
     const { error } = await supabase.from("salons").update({ visible: !current }).eq("id", sid)
     if (error) { toast("⚠ حدث خطأ: " + error.message); return }
     toast(!current ? "✅ الصالون ظاهر الآن للعميلات" : "🚫 تم إخفاء الصالون عن العميلات")
+
+    // عند التفعيل (مو الإخفاء) — تحقق من وجود إحالة وامنح صاحبتها 200 ر.س بالمحفظة
+    if (!current) {
+      const { data: salonRow } = await supabase.from("salons").select("referred_by_code, referral_rewarded, name").eq("id", sid)
+      const s = salonRow?.[0]
+      if (s?.referred_by_code && !s.referral_rewarded) {
+        const { data: clientRow } = await supabase.from("clients").select("id, full_name").eq("referral_code", s.referred_by_code)
+        if (clientRow?.[0]) {
+          const expiresAt = new Date()
+          expiresAt.setFullYear(expiresAt.getFullYear() + 1)
+          const { error: creditError } = await supabase.from("wallet_credits").insert([{
+            client_id: clientRow[0].id,
+            amount: 200,
+            remaining: 200,
+            source: "referral",
+            source_salon_id: sid,
+            expires_at: expiresAt.toISOString(),
+          }])
+          if (!creditError) {
+            await supabase.from("salons").update({ referral_rewarded: true }).eq("id", sid)
+            toast("🎁 تم منح " + (clientRow[0].full_name || "العميلة") + " رصيد 200 ر.س مقابل إحالة " + s.name)
+          }
+        }
+      }
+    }
     onUpdate()
   }
 
@@ -7480,6 +7822,11 @@ function AdminSalonsList({ salonsList, onUpdate }) {
                 {s.visible ? "إخفاء" : "✅ تفعيل الظهور"}
               </button>
             </div>
+            {s.referred_by_code && !s.visible && (
+              <div style={{ fontSize:10, color:T.gold, marginBottom:10, textAlign:"center" }}>
+                🎁 صالون مُرشَّح — تفعيله يمنح المُرشِّحة 200 ر.س تلقائياً
+              </div>
+            )}
 
             {/* تغيير الباقة */}
             {editId === s.id ? (
@@ -7943,6 +8290,13 @@ export default function App() {
   const [salon, setSalon] = useState(null)
   const [payData, setPayData] = useState(null)
   const [user, setUser] = useState(null)
+
+  // التقاط كود الإحالة من الرابط (مثل ?ref=ABC123) وحفظه — يبقى متاحاً وقت تسجيل الصالون
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const ref = params.get("ref")
+    if (ref) sessionStorage.setItem("referral_code", ref)
+  }, [])
 
   // تحقق من الجلسة عند فتح الموقع
   useEffect(() => {
