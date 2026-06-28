@@ -1439,15 +1439,22 @@ function BookingPage({ salon, setScreen }) {
       })
   }, [salon?.id, staffList])
 
+  // الوقت الحالي بتوقيت السعودية الثابت (UTC+3) — يعتمد على UTC الحقيقي فقط، بدون أي تأثير من توقيت جهاز العميلة
+  const getSaudiNow = () => {
+    const saudiMs = Date.now() + (3 * 60 * 60 * 1000)
+    return new Date(saudiMs)
+  }
+
   const getNearestSlot = (staffMember) => {
-    const todayName = DAY_NAMES_AR[new Date().getDay()]
+    const saudiNow = getSaudiNow()
+    const todayName = DAY_NAMES_AR[saudiNow.getUTCDay()]
     if (staffMember.days && !staffMember.days.includes(todayName)) return null
     const fi = ALL_SVC_TIMES.indexOf(staffMember.time_from || "09:00")
     const ti = ALL_SVC_TIMES.indexOf(staffMember.time_to || "18:00")
     if (fi < 0 || ti < 0) return null
     const dayTimes = ALL_SVC_TIMES.slice(fi, ti + 1)
     const busy = staffBusyTimes[staffMember.id] || []
-    const nowStr = new Date().toTimeString().slice(0, 5)
+    const nowStr = String(saudiNow.getUTCHours()).padStart(2,"0") + ":" + (saudiNow.getUTCMinutes() < 30 ? "00" : "30")
     return dayTimes.find(t => !busy.includes(t) && t >= nowStr) || null
   }
 
@@ -1595,7 +1602,15 @@ function BookingPage({ salon, setScreen }) {
             )}
 
             <div style={{ marginBottom:16 }}>
-              <label style={{ display:"block", fontSize:13, fontWeight:700, color:T.inkSoft, marginBottom:7 }}>الوقت <span style={{ color:T.rose }}>*</span></label>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:7 }}>
+                <label style={{ fontSize:13, fontWeight:700, color:T.inkSoft }}>الوقت <span style={{ color:T.rose }}>*</span></label>
+                {selectedStaff && (
+                  <button onClick={() => setShowNotifyMe(true)}
+                    style={{ fontSize:11, color:T.gold, background:"none", border:"none", cursor:"pointer", fontFamily:"Tajawal,sans-serif", fontWeight:700 }}>
+                    🔔 أشعريني لو فضى وقت آخر
+                  </button>
+                )}
+              </div>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8 }}>
                 {TIMES.map(tm => (
                   <button key={tm} onClick={() => setTime(tm)}
@@ -1611,7 +1626,7 @@ function BookingPage({ salon, setScreen }) {
                     {selectedStaff && (
                       <button onClick={() => setShowNotifyMe(true)}
                         style={{ width:"100%", padding:"10px", borderRadius:10, border:`1px solid ${T.gold}`, background:T.goldPale, color:T.gold, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
-                        🔔 أشعريني عند توفر وقت عند {selectedStaff.name}
+                        🔔 أشعريني فور توفر وقت عند {selectedStaff.name}
                       </button>
                     )}
                   </div>
