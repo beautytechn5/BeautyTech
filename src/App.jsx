@@ -377,7 +377,7 @@ function useSalons() {
         tags: s.bio ? [s.bio.slice(0,20)] : [],
         services: (allServices || [])
           .filter(sv => sv.salon_id === s.id)
-          .map(sv => ({ n: sv.name, p: sv.price, dur: sv.duration, timeFrom: sv.time_from, timeTo: sv.time_to, days: sv.days })),
+          .map(sv => ({ n: sv.name, p: sv.price, dur: sv.duration, timeFrom: sv.time_from, timeTo: sv.time_to, days: sv.days, category: sv.category })),
         wa: (s.phone || "0500000000"),
         mapUrl: s.map_url || "",
         imageUrl: s.image_url || "",
@@ -1409,12 +1409,16 @@ function BookingPage({ salon, setScreen }) {
   }
   useEffect(refreshBookedTimes, [date, salon?.id, selectedStaff?.id])
 
-  // جلب فريق الصالون لاختيار الموظفة
+  // جلب فريق الصالون — فقط الموظفات المتخصصات بهذي الخدمة (أو "كل الخدمات")
   useEffect(() => {
     if (!salon?.id) return
     supabase.from('staff').select('*').eq('salon_id', salon.id).eq('active', true)
-      .then(({ data }) => setStaffList(data || []))
-  }, [salon?.id])
+      .then(({ data }) => {
+        const all = data || []
+        if (!svc?.category) { setStaffList(all); return }
+        setStaffList(all.filter(st => st.specialty === svc.category || st.specialty === "كل الخدمات"))
+      })
+  }, [salon?.id, svc?.category])
 
   // حساب أقرب وقت متاح لكل موظفة اليوم (لعرضه بجانب اسمها بقائمة الاختيار)
   useEffect(() => {
@@ -1543,7 +1547,7 @@ function BookingPage({ salon, setScreen }) {
             <div style={{ fontSize:16, fontWeight:800, color:T.ink, marginBottom:14 }}>اختاري الخدمة</div>
             <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:22 }}>
               {salon.services.map(sv => (
-                <div key={sv.n} onClick={() => setSvc(sv)}
+                <div key={sv.n} onClick={() => { setSvc(sv); setSelectedStaff(null); setTime("") }}
                   style={{ background:T.white, borderRadius:14, padding:"14px 16px", border:`2px solid ${svc && svc.n === sv.n ? T.roseDp : T.creamDk}`, cursor:"pointer", display:"flex", justifyContent:"space-between", alignItems:"center", transition:"all .2s" }}>
                   <div>
                     <div style={{ fontSize:14, fontWeight:700, color:T.ink }}>{getServiceEmoji(sv.n)} {sv.n}</div>
@@ -2566,21 +2570,28 @@ function ManualBookingModal({ salonId, onClose, onCreated, toast }) {
   const [bookedTimes, setBookedTimes] = useState([])
   const [saving, setSaving] = useState(false)
   const [staffList, setStaffList] = useState([])
+  const [allStaff, setAllStaff] = useState([])
   const [staffId, setStaffId] = useState("")
 
   useEffect(() => {
     const load = async () => {
       const { data } = await supabase.from('services').select('*').eq('salon_id', salonId)
       setServices((data || []).map(s => ({
-        id: s.id, name: s.name, price: s.price,
+        id: s.id, name: s.name, price: s.price, category: s.category,
         timeFrom: s.time_from || "09:00", timeTo: s.time_to || "18:00",
       })))
       const { data: staffData } = await supabase.from('staff').select('*').eq('salon_id', salonId).eq('active', true)
-      setStaffList(staffData || [])
+      setAllStaff(staffData || [])
       setLoadingSvcs(false)
     }
     load()
   }, [salonId])
+
+  // فلترة الموظفات حسب تخصصهم المطابق لتصنيف الخدمة المختارة
+  useEffect(() => {
+    if (!svc?.category) { setStaffList(allStaff); return }
+    setStaffList(allStaff.filter(st => st.specialty === svc.category || st.specialty === "كل الخدمات"))
+  }, [svc?.category, allStaff])
 
   // جلب الأوقات المحجوزة — لو فيه موظفة محددة، فقط حجوزاتها هي (يدوي + أونلاين مدمجين)
   const refreshBookedTimes = () => {
@@ -2681,7 +2692,7 @@ function ManualBookingModal({ salonId, onClose, onCreated, toast }) {
             <label style={{ fontSize:12, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:6 }}>الخدمة *</label>
             <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:14 }}>
               {services.map(s => (
-                <button key={s.id} onClick={() => { setSvc(s); setTime("") }}
+                <button key={s.id} onClick={() => { setSvc(s); setTime(""); setStaffId("") }}
                   style={{ display:"flex", justifyContent:"space-between", padding:"10px 12px", borderRadius:10, border:`1.5px solid ${svc?.id===s.id ? T.roseDp : T.creamDk}`, background:svc?.id===s.id ? T.roseL : T.white, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
                   <span style={{ fontSize:13, fontWeight:700, color:T.ink }}>{s.name}</span>
                   <span style={{ fontSize:13, fontWeight:800, color:T.gold }}>{s.price} ر.س</span>
@@ -3958,6 +3969,7 @@ function OwnerWhatsapp({ toast }) {
    ⏰ OWNER SERVICES — مع الأوقات المتاحة
 ══════════════════════════════════════════ */
 const DAYS = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"]
+const SERVICE_CATEGORIES = ["قص شعر","صبغ","مكياج","عناية بشرة","أظافر","رموش","حناء","كيراتين"]
 const ALL_TIMES = ["00:00","00:30","01:00","01:30","02:00","02:30","03:00","03:30","04:00","04:30","05:00","05:30","06:00","06:30","07:00","07:30","08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00","21:30","22:00","22:30","23:00","23:30"]
 
 function OwnerServices({ toast }) {
@@ -3979,6 +3991,7 @@ function OwnerServices({ toast }) {
         id: s.id,
         name: s.name,
         price: s.price,
+        category: s.category || "",
         duration: s.duration || 60,
         active: s.active !== false,
         days: s.days || [],
@@ -3992,7 +4005,7 @@ function OwnerServices({ toast }) {
   const [showAdd, setShowAdd] = useState(false)
   const [editId, setEditId] = useState(null)
   const [editSvc, setEditSvc] = useState(null)
-  const [newSvc, setNewSvc] = useState({ name:"", price:"", duration:60, days:["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس"], timeFrom:"09:00", timeTo:"18:00" })
+  const [newSvc, setNewSvc] = useState({ name:"", price:"", category:"", duration:60, days:["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس"], timeFrom:"09:00", timeTo:"18:00" })
   const [focusF, setFocusF] = useState(null)
 
   const startEdit = (sv) => {
@@ -4029,6 +4042,7 @@ function OwnerServices({ toast }) {
       salon_id: ownerSalonId,
       name: newSvc.name,
       price: Number(newSvc.price),
+      category: newSvc.category || null,
       duration: newSvc.duration,
       days: newSvc.days,
       time_from: newSvc.timeFrom,
@@ -4041,6 +4055,7 @@ function OwnerServices({ toast }) {
         id: data[0].id,
         name: data[0].name,
         price: data[0].price,
+        category: data[0].category || "",
         duration: data[0].duration || 60,
         active: true,
         days: data[0].days || [],
@@ -4099,6 +4114,19 @@ function OwnerServices({ toast }) {
               <input type="number" value={newSvc.price} onChange={e => setNewSvc(s => ({ ...s, price:e.target.value }))}
                 placeholder="150" onFocus={() => setFocusF("pr")} onBlur={() => setFocusF(null)}
                 style={{ ...inp("pr"), width:"100%" }} />
+            </div>
+          </div>
+
+          {/* التصنيف — يربط الخدمة بالموظفات المتخصصات بها */}
+          <div style={{ marginBottom:14 }}>
+            <label style={{ fontSize:12, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:8 }}>تصنيف الخدمة — يحدد أي موظفات يظهرن لهذي الخدمة</label>
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+              {SERVICE_CATEGORIES.map(c => (
+                <button key={c} onClick={() => setNewSvc(s => ({ ...s, category: c }))}
+                  style={{ padding:"6px 14px", borderRadius:20, border:`1.5px solid ${newSvc.category===c ? T.roseDp : T.creamDk}`, background:newSvc.category===c ? T.roseL : T.white, color:newSvc.category===c ? T.roseDp : T.inkSoft, fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                  {c}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -4708,7 +4736,7 @@ function OwnerStaff({ toast }) {
   const [staff, setStaff] = useState([])
   const [showAdd, setShowAdd] = useState(false)
   const [salonId, setSalonId] = useState(null)
-  const [form, setForm] = useState({ name:"", phone:"", specialty:"", days:[], time_from:"09:00", time_to:"18:00" })
+  const [form, setForm] = useState({ name:"", specialty:"", days:[], time_from:"09:00", time_to:"18:00" })
   const [saving, setSaving] = useState(false)
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }))
 
@@ -4732,7 +4760,7 @@ function OwnerStaff({ toast }) {
     setSaving(false)
     if (error) { toast("⚠ تعذّر إضافة الموظفة: " + error.message); return }
     if (data?.[0]) setStaff(s => [...s, data[0]])
-    setForm({ name:"", phone:"", specialty:"", days:[], time_from:"09:00", time_to:"18:00" })
+    setForm({ name:"", specialty:"", days:[], time_from:"09:00", time_to:"18:00" })
     setShowAdd(false)
     toast("✅ تمت إضافة الموظفة!")
   }
@@ -4744,7 +4772,7 @@ function OwnerStaff({ toast }) {
     toast("🗑 تم الحذف")
   }
 
-  const SPECIALTIES = ["قص شعر","صبغ","مكياج","عناية بشرة","أظافر","رموش","حناء","كيراتين","كل الخدمات"]
+  const SPECIALTIES = [...SERVICE_CATEGORIES, "كل الخدمات"]
 
   return (
     <div>
@@ -4759,17 +4787,10 @@ function OwnerStaff({ toast }) {
       {showAdd && (
         <Card style={{ padding:16, marginBottom:14, border:`2px solid ${T.roseL}` }}>
           <div style={{ fontSize:14, fontWeight:800, color:T.ink, marginBottom:12 }}>موظفة جديدة</div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
-            <div>
-              <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:4 }}>الاسم *</label>
-              <input value={form.name} onChange={set("name")} placeholder="اسم الموظفة"
-                style={{ width:"100%", padding:"9px 12px", border:`1.5px solid ${T.creamDk}`, borderRadius:10, fontSize:13, fontFamily:"Tajawal,sans-serif", background:T.cream, color:T.ink, outline:"none" }} />
-            </div>
-            <div>
-              <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:4 }}>الجوال</label>
-              <input value={form.phone} onChange={set("phone")} placeholder="05xxxxxxxx"
-                style={{ width:"100%", padding:"9px 12px", border:`1.5px solid ${T.creamDk}`, borderRadius:10, fontSize:13, fontFamily:"Tajawal,sans-serif", background:T.cream, color:T.ink, outline:"none" }} />
-            </div>
+          <div style={{ marginBottom:10 }}>
+            <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:4 }}>الاسم *</label>
+            <input value={form.name} onChange={set("name")} placeholder="اسم الموظفة"
+              style={{ width:"100%", padding:"9px 12px", border:`1.5px solid ${T.creamDk}`, borderRadius:10, fontSize:13, fontFamily:"Tajawal,sans-serif", background:T.cream, color:T.ink, outline:"none" }} />
           </div>
           <div style={{ marginBottom:10 }}>
             <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:4 }}>التخصص</label>
@@ -4826,7 +4847,6 @@ function OwnerStaff({ toast }) {
                 <div>
                   <div style={{ fontSize:14, fontWeight:800, color:T.ink }}>{s.name}</div>
                   {s.specialty && <div style={{ fontSize:12, color:T.roseDp, marginTop:2 }}>✂️ {s.specialty}</div>}
-                  {s.phone && <div style={{ fontSize:11, color:T.inkSoft }}>📞 {s.phone}</div>}
                   {s.days?.length > 0 && <div style={{ fontSize:11, color:T.inkSoft }}>{s.days.join(" · ")}</div>}
                   {s.time_from && <div style={{ fontSize:11, color:T.inkSoft }}>⏰ {s.time_from} — {s.time_to}</div>}
                   {s.rating > 0 && <div style={{ fontSize:11, color:T.gold, marginTop:2 }}>⭐ {Number(s.rating).toFixed(1)} ({s.rating_count} تقييم)</div>}
