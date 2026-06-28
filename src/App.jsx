@@ -4750,6 +4750,7 @@ function OwnerCalendar({ toast }) {
 function OwnerStaff({ toast }) {
   const [staff, setStaff] = useState([])
   const [showAdd, setShowAdd] = useState(false)
+  const [editingId, setEditingId] = useState(null)
   const [salonId, setSalonId] = useState(null)
   const [form, setForm] = useState({ name:"", specialty:"", days:[], time_from:"09:00", time_to:"18:00" })
   const [saving, setSaving] = useState(false)
@@ -4768,16 +4769,45 @@ function OwnerStaff({ toast }) {
     load()
   }, [])
 
+  const resetForm = () => setForm({ name:"", specialty:"", days:[], time_from:"09:00", time_to:"18:00" })
+
+  const startEdit = (s) => {
+    setForm({
+      name: s.name || "",
+      specialty: s.specialty || "",
+      days: s.days || [],
+      time_from: s.time_from || "09:00",
+      time_to: s.time_to || "18:00",
+    })
+    setEditingId(s.id)
+    setShowAdd(true)
+  }
+
+  const cancelForm = () => {
+    setShowAdd(false)
+    setEditingId(null)
+    resetForm()
+  }
+
   const saveStaff = async () => {
     if (!form.name) { toast("⚠ أدخلي اسم الموظفة"); return }
     setSaving(true)
-    const { data, error } = await supabase.from("staff").insert([{ salon_id: salonId, ...form, active:true }]).select()
-    setSaving(false)
-    if (error) { toast("⚠ تعذّر إضافة الموظفة: " + error.message); return }
-    if (data?.[0]) setStaff(s => [...s, data[0]])
-    setForm({ name:"", specialty:"", days:[], time_from:"09:00", time_to:"18:00" })
-    setShowAdd(false)
-    toast("✅ تمت إضافة الموظفة!")
+
+    if (editingId) {
+      // تعديل موظفة موجودة — يحافظ على تاريخها وتقييمها وكل حجوزاتها المرتبطة بها
+      const { error } = await supabase.from("staff").update({ ...form }).eq("id", editingId)
+      setSaving(false)
+      if (error) { toast("⚠ تعذّر حفظ التعديل: " + error.message); return }
+      setStaff(s => s.map(x => x.id === editingId ? { ...x, ...form } : x))
+      toast("✅ تم حفظ تعديل الموظفة!")
+    } else {
+      const { data, error } = await supabase.from("staff").insert([{ salon_id: salonId, ...form, active:true }]).select()
+      setSaving(false)
+      if (error) { toast("⚠ تعذّر إضافة الموظفة: " + error.message); return }
+      if (data?.[0]) setStaff(s => [...s, data[0]])
+      toast("✅ تمت إضافة الموظفة!")
+    }
+    cancelForm()
   }
 
   const deleteStaff = async (id) => {
@@ -4796,12 +4826,12 @@ function OwnerStaff({ toast }) {
           <div style={{ fontSize:16, fontWeight:800, color:T.ink }}>👩💼 فريق العمل</div>
           <div style={{ fontSize:11, color:T.inkSoft, marginTop:2 }}>أضيفي موظفاتك وتخصصاتهن</div>
         </div>
-        <PBtn sm onClick={() => setShowAdd(!showAdd)}>+ إضافة</PBtn>
+        <PBtn sm onClick={() => { if (showAdd) { cancelForm() } else { resetForm(); setShowAdd(true) } }}>{showAdd ? "إلغاء" : "+ إضافة"}</PBtn>
       </div>
 
       {showAdd && (
         <Card style={{ padding:16, marginBottom:14, border:`2px solid ${T.roseL}` }}>
-          <div style={{ fontSize:14, fontWeight:800, color:T.ink, marginBottom:12 }}>موظفة جديدة</div>
+          <div style={{ fontSize:14, fontWeight:800, color:T.ink, marginBottom:12 }}>{editingId ? "تعديل بيانات الموظفة" : "موظفة جديدة"}</div>
           <div style={{ marginBottom:10 }}>
             <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:4 }}>الاسم *</label>
             <input value={form.name} onChange={set("name")} placeholder="اسم الموظفة"
@@ -4843,9 +4873,9 @@ function OwnerStaff({ toast }) {
             </div>
           </div>
           <div style={{ display:"flex", gap:8 }}>
-            <button onClick={() => setShowAdd(false)} style={{ flex:1, padding:"10px", borderRadius:10, border:`1px solid ${T.creamDk}`, background:T.white, color:T.inkSoft, fontSize:12, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>إلغاء</button>
+            <button onClick={cancelForm} style={{ flex:1, padding:"10px", borderRadius:10, border:`1px solid ${T.creamDk}`, background:T.white, color:T.inkSoft, fontSize:12, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>إلغاء</button>
             <button onClick={saveStaff} disabled={saving} style={{ flex:2, padding:"10px", borderRadius:10, border:"none", background:T.roseDp, color:T.white, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
-              {saving ? "...جاري" : "✓ إضافة"}
+              {saving ? "...جاري" : editingId ? "✓ حفظ التعديل" : "✓ إضافة"}
             </button>
           </div>
         </Card>
@@ -4867,7 +4897,10 @@ function OwnerStaff({ toast }) {
                   {s.rating > 0 && <div style={{ fontSize:11, color:T.gold, marginTop:2 }}>⭐ {Number(s.rating).toFixed(1)} ({s.rating_count} تقييم)</div>}
                 </div>
               </div>
-              <button onClick={() => deleteStaff(s.id)} style={{ width:28, height:28, borderRadius:"50%", border:`1px solid ${T.redL}`, background:T.white, color:T.red, fontSize:12, cursor:"pointer" }}>✕</button>
+              <div style={{ display:"flex", gap:6 }}>
+                <button onClick={() => startEdit(s)} style={{ width:28, height:28, borderRadius:"50%", border:`1px solid ${T.creamDk}`, background:T.white, color:T.inkSoft, fontSize:12, cursor:"pointer" }}>✎</button>
+                <button onClick={() => deleteStaff(s.id)} style={{ width:28, height:28, borderRadius:"50%", border:`1px solid ${T.redL}`, background:T.white, color:T.red, fontSize:12, cursor:"pointer" }}>✕</button>
+              </div>
             </div>
           </Card>
         ))}
