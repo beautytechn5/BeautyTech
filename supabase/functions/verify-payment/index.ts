@@ -2,7 +2,7 @@
 // 🔒 VERIFY PAYMENT — Edge Function
 // يتأكد من نجاح الدفع عن طريق ميسر باستخدام المفتاح السري
 // المفتاح السري لا يظهر أبداً للمتصفح — يبقى هنا فقط بأمان
-// يدعم أيضاً الدفع الجزئي أو الكامل من محفظة العميلة
+// يدعم أيضاً الدفع الجزئي أو الكامل من محفظة العميلة، والتجديد الذاتي للاشتراك
 // ══════════════════════════════════════════
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
@@ -48,9 +48,80 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { payment_id, booking_data, wallet_only, client_id, wallet_amount, subscription_data } = await req.json()
+    const { payment_id, booking_data, wallet_only, client_id, wallet_amount, subscription_data, renewal_data } = await req.json()
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+    // ══════════════════════════════════════
+    // الحالة الخاصة: تجديد اشتراك صالون موجود فعلاً (يُحدّد بـ salon_code الفريد)
+    // ══════════════════════════════════════
+    if (renewal_data) {
+      if (!payment_id || !renewal_data.salon_code) {
+        return new Response(
+          JSON.stringify({ error: 'بيانات التجديد غير مكتملة' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const moyasarRes = await fetch(`https://api.moyasar.com/v1/payments/${payment_id}`, {
+        headers: { 'Authorization': 'Basic ' + btoa(`${MOYASAR_SECRET_KEY}:`) },
+      })
+
+      if (!moyasarRes.ok) {
+        return new Response(
+          JSON.stringify({ error: 'تعذّر التحقق من الدفع عند ميسر' }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const payment = await moyasarRes.json()
+
+      if (payment.status !== 'paid') {
+        return new Response(
+          JSON.stringify({ error: 'الدفع لم يكتمل', status: payment.status }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      if (renewal_data.expected_amount && payment.amount !== renewal_data.expected_amount) {
+        return new Response(
+          JSON.stringify({ error: 'المبلغ المدفوع لا يطابق المبلغ المطلوب — تم رفض العملية أمنياً' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const { data: salonCheck } = await supabase.from('salons').select('id, billing').eq('salon_code', renewal_data.salon_code)
+      if (!salonCheck?.[0]) {
+        return new Response(
+          JSON.stringify({ error: 'تم الدفع بنجاح لكن رقم الصالون غير صحيح — تواصلي مع الدعم فوراً', payment_id: payment.id, payment_succeeded: true }),
+          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const subEnd = new Date()
+      if (salonCheck[0].billing === 'yearly') subEnd.setFullYear(subEnd.getFullYear() + 1)
+      else subEnd.setMonth(subEnd.getMonth() + 1)
+
+      const { error: updateError } = await supabase.from('salons').update({
+        trial_end: null,
+        skip_trial: true,
+        visible: true,
+        subscription_end: subEnd.toISOString().split('T')[0],
+        payment_id: payment.id,
+      }).eq('id', salonCheck[0].id)
+
+      if (updateError) {
+        return new Response(
+          JSON.stringify({ error: 'تم الدفع بنجاح لكن تعذّر تحديث الحساب: ' + updateError.message, payment_id: payment.id, payment_succeeded: true }),
+          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, subscription_end: subEnd.toISOString().split('T')[0] }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
 
     // ══════════════════════════════════════
     // الحالة الخاصة: اشتراك صالون جديد (تخطّي التجربة المجانية) أو ترقية باقة
@@ -90,7 +161,6 @@ Deno.serve(async (req) => {
         )
       }
 
-      // الدفع تأكد فعلياً — إنشاء حساب Auth + سجل الصالون، مفعّل وظاهر فوراً
       const { data: authData, error: authError } = await supabase.auth.admin.createUser({
         email: subscription_data.email,
         password: subscription_data.password,
@@ -111,7 +181,7 @@ Deno.serve(async (req) => {
 
       const { data: salonRow, error: salonError } = await supabase.from('salons').insert([{
         ...subscription_data.salon_fields,
-        visible: true,        // مفعّل وظاهر فوراً — لا حاجة لانتظار تفعيل المنصة لأن الدفع تم فعلياً
+        visible: true,
         skip_trial: true,
         trial_end: null,
         subscription_end: subEnd.toISOString().split('T')[0],
@@ -159,7 +229,6 @@ Deno.serve(async (req) => {
         .select()
 
       if (insertError) {
-        // رجّعي الرصيد المخصوم لأن الحجز فشل (تعارض وقت مثلاً)
         await deductWallet(supabase, client_id, -wallet_amount).catch(() => {})
         const isSlotTaken = insertError.message?.includes('duplicate key') || insertError.code === '23505'
         return new Response(
@@ -186,7 +255,6 @@ Deno.serve(async (req) => {
       )
     }
 
-    // ١. نسأل ميسر مباشرة عن حالة الدفع الحقيقية (بالمفتاح السري — أمن 100%)
     const moyasarRes = await fetch(`https://api.moyasar.com/v1/payments/${payment_id}`, {
       headers: {
         'Authorization': 'Basic ' + btoa(`${MOYASAR_SECRET_KEY}:`),
@@ -202,7 +270,6 @@ Deno.serve(async (req) => {
 
     const payment = await moyasarRes.json()
 
-    // ٢. لازم يكون status = "paid" فقط — أي شي آخر يعني الدفع لم يكتمل
     if (payment.status !== 'paid') {
       return new Response(
         JSON.stringify({ error: 'الدفع لم يكتمل', status: payment.status, message: payment.source?.message }),
@@ -210,7 +277,6 @@ Deno.serve(async (req) => {
       )
     }
 
-    // ٣. تحقق إضافي: المبلغ المدفوع فعلياً يطابق المبلغ المتوقع بالضبط (بعد خصم المحفظة لو طُبِّقت)
     if (booking_data?.expected_amount && payment.amount !== booking_data.expected_amount) {
       return new Response(
         JSON.stringify({ error: 'المبلغ المدفوع لا يطابق المبلغ المطلوب — تم رفض العملية أمنياً' }),
@@ -218,14 +284,10 @@ Deno.serve(async (req) => {
       )
     }
 
-    // ٤. لو فيه خصم من المحفظة مرفق مع دفع ميسر الجزئي، نخصمه الآن (بعد تأكيد دفع ميسر بنجاح)
     if (client_id && wallet_amount > 0) {
       await deductWallet(supabase, client_id, wallet_amount)
-      // لو فشل الخصم هنا لأي سبب، لا نوقف الحجز — ميسر دفع فعلياً والعميلة لن تخسر شيء،
-      // فقط لن يُخصم من محفظتها هذه المرة (نادر جداً ولا يضر العميلة)
     }
 
-    // ٥. الدفع تأكد فعلياً — الحين نسجّل الحجز بقاعدة البيانات باستخدام صلاحية كاملة (service role)
     const { data: insertedBooking, error: insertError } = await supabase
       .from('bookings')
       .insert([{
@@ -238,10 +300,8 @@ Deno.serve(async (req) => {
       .select()
 
     if (insertError) {
-      // الدفع نجح لكن فشل حفظ الحجز
       const isSlotTaken = insertError.message?.includes('duplicate key') || insertError.code === '23505'
 
-      // سجّل الحالة بجدول خاص عشان تتابعها وتسترجع الفلوس يدوياً من لوحة ميسر
       await supabase.from('refunds_needed').insert([{
         payment_id: payment.id,
         amount: payment.amount,

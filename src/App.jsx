@@ -51,12 +51,12 @@ function Card({ children, style }) {
    تحمّل نموذج ميسر الرسمي (الكارت بياناته ما تلمس موقعنا أبداً)
    بعد نجاح الدفع، تستدعي Edge Function للتحقق والحفظ الآمن
 ══════════════════════════════════════════ */
-function MoyasarPaymentModal({ amount, description, bookingFields, subscriptionFields, clientId, walletAmount, onSuccess, onClose, toast }) {
+function MoyasarPaymentModal({ amount, description, bookingFields, subscriptionFields, renewalFields, clientId, walletAmount, onSuccess, onClose, toast }) {
   const [loaded, setLoaded] = useState(false)
   const [verifying, setVerifying] = useState(false)
   const [formId] = useState(() => "mysr-form-" + Math.random().toString(36).slice(2, 9))
   const finalAmount = Math.max(0, amount - (walletAmount || 0))
-  const walletOnly = !subscriptionFields && finalAmount <= 0 && (walletAmount || 0) > 0
+  const walletOnly = !subscriptionFields && !renewalFields && finalAmount <= 0 && (walletAmount || 0) > 0
 
   useEffect(() => {
     // الحالة الخاصة: المحفظة تغطي المبلغ كامل — ما نحتاج ميسر إطلاقاً
@@ -116,7 +116,15 @@ function MoyasarPaymentModal({ amount, description, bookingFields, subscriptionF
         on_completed: async function (payment) {
           setVerifying(true)
           try {
-            const payload = subscriptionFields
+            const payload = renewalFields
+              ? {
+                  payment_id: payment.id,
+                  renewal_data: {
+                    expected_amount: Math.round(finalAmount * 100),
+                    salon_code: renewalFields.salon_code,
+                  },
+                }
+              : subscriptionFields
               ? {
                   payment_id: payment.id,
                   subscription_data: {
@@ -147,7 +155,7 @@ function MoyasarPaymentModal({ amount, description, bookingFields, subscriptionF
               toast("⚠ " + (result.error || "تعذّر تأكيد الدفع"))
               return
             }
-            onSuccess(subscriptionFields ? result.salon : result.booking)
+            onSuccess(renewalFields ? result : subscriptionFields ? result.salon : result.booking)
           } catch (e) {
             setVerifying(false)
             toast("⚠ حدث خطأ بالتحقق من الدفع: " + e.message)
@@ -2112,11 +2120,22 @@ function OwnerRegister({ setScreen }) {
     if (!form.name || !form.owner || !form.phone || !form.email || !form.pass) return toast("⚠ يرجى تعبئة الحقول الإلزامية")
     if (form.pass !== form.confirm) return toast("⚠ كلمة المرور غير متطابقة")
     if (form.pass.length < 6) return toast("⚠ كلمة المرور 6 أحرف على الأقل")
-    // تحقق من التجربة المجانية
-    const { data: existing } = await supabase.from('salons').select('id').eq('email', form.email)
-    if (existing && existing.length > 0) { toast("⚠ هذا الإيميل مسجّل مسبقاً — التجربة المجانية لمرة واحدة فقط"); return }
+
+    // تطبيع البيانات قبل الفحص — يمنع محاولات تفادي الفحص بفراغات زائدة أو اختلاف حالة الأحرف
+    const normalizedName = form.name.trim().replace(/\s+/g, " ").toLowerCase()
+    const normalizedPhone = form.phone.replace(/[^0-9]/g, "")
+
+    // تحقق من التجربة المجانية — اسم الصالون + الإيميل + رقم الجوال، الثلاثة معاً يمنعون الاستغلال
+    const { data: existingEmail } = await supabase.from('salons').select('id').eq('email', form.email)
+    if (existingEmail && existingEmail.length > 0) { toast("⚠ هذا الإيميل مسجّل مسبقاً — التجربة المجانية لمرة واحدة فقط"); return }
+
     const { data: existingPhone } = await supabase.from('salons').select('id').eq('phone', form.phone)
     if (existingPhone && existingPhone.length > 0) { toast("⚠ رقم الجوال مسجّل مسبقاً — التجربة المجانية لمرة واحدة فقط"); return }
+
+    const { data: allSalons } = await supabase.from('salons').select('id, name')
+    const nameTaken = (allSalons || []).some(s => (s.name || "").trim().replace(/\s+/g, " ").toLowerCase() === normalizedName)
+    if (nameTaken) { toast("⚠ اسم الصالون هذا مسجّل مسبقاً — لا يمكن استخدامه مرة أخرى للتجربة المجانية"); return }
+
     setStep(2)
   }
 
@@ -2148,6 +2167,7 @@ function OwnerRegister({ setScreen }) {
     // حفظ بيانات الصالون
     const trialEnd = new Date()
     trialEnd.setDate(trialEnd.getDate() + 14)
+    const generatedSalonCode = "ST" + Math.random().toString(36).slice(2, 8).toUpperCase()
     const { data, error } = await supabase.from('salons').insert([{
       name: form.name,
       owner_name: form.owner,
@@ -2160,9 +2180,21 @@ function OwnerRegister({ setScreen }) {
       trial_end: trialEnd.toISOString(),
       visible: false,   // مخفي عن العميلات حتى تتأكد المنصة من دفع رسوم التأسيس
       referred_by_code: sessionStorage.getItem("referral_code") || null,
+      salon_code: generatedSalonCode,
     }]).select()
     setLoading(false)
-    if (error) { toast("⚠ حدث خطأ: " + error.message); return }
+    if (error) {
+      if (error.message?.includes("duplicate key") || error.code === "23505") {
+        if (error.message?.includes("phone")) {
+          toast("⚠ رقم الجوال مسجّل مسبقاً — التجربة المجانية لمرة واحدة فقط")
+        } else {
+          toast("⚠ اسم الصالون هذا مسجّل مسبقاً — لا يمكن استخدامه مرة أخرى للتجربة المجانية")
+        }
+      } else {
+        toast("⚠ حدث خطأ: " + error.message)
+      }
+      return
+    }
     if (data && data[0]) setSalonId(data[0].id)
     setStep(3)
   }
@@ -2495,6 +2527,7 @@ function OwnerRegister({ setScreen }) {
               package: pkg,
               billing: billing,
               referred_by_code: sessionStorage.getItem("referral_code") || null,
+              salon_code: "ST" + Math.random().toString(36).slice(2, 8).toUpperCase(),
             },
           }}
           onSuccess={handleSubPaymentSuccess}
@@ -2582,7 +2615,7 @@ function OwnerDashboard({ setScreen }) {
   const refreshSalonInfo = async () => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
-    const { data } = await supabase.from('salons').select('name,trial_end,city,owner_name,phone,bio,email,package').eq('email', session.user.email)
+    const { data } = await supabase.from('salons').select('id,name,trial_end,city,owner_name,phone,bio,email,package,billing,salon_code').eq('email', session.user.email)
     if (data && data[0]) setSalonInfo({ ...data[0] })
   }
 
@@ -2593,6 +2626,16 @@ function OwnerDashboard({ setScreen }) {
     ? Math.max(0, Math.ceil((new Date(salonInfo.trial_end) - new Date()) / (1000*60*60*24)))
     : 14
   const trialExpired = salonInfo.trial_end && new Date(salonInfo.trial_end) < new Date()
+  const [showRenewal, setShowRenewal] = useState(false)
+  const renewalPkgPrice = PKGS.find(p => p.id === salonInfo.package)?.price || 0
+  const renewalAmount = (salonInfo.billing === "yearly" ? renewalPkgPrice * 11 : renewalPkgPrice) + 600
+
+  // يُستدعى بعد نجاح دفع التجديد فعلياً — تحديث الحساب تلقائياً بدون أي تدخل
+  const handleRenewalSuccess = () => {
+    setShowRenewal(false)
+    toast("✅ تم تجديد اشتراكك وتفعيل حسابك فوراً!")
+    refreshSalonInfo()
+  }
 
   // قفل لوحة التحكم عند انتهاء التجربة المجانية بدون تفعيل باقة مدفوعة
   if (trialExpired) return (
@@ -2602,19 +2645,36 @@ function OwnerDashboard({ setScreen }) {
         <div style={{ fontSize:19, fontWeight:900, color:T.ink, marginBottom:10 }}>انتهت التجربة المجانية</div>
         <p style={{ fontSize:14, color:T.inkSoft, lineHeight:1.8, marginBottom:24 }}>
           استمتعتِ بـ 14 يوم مجاناً على بيوتي تيك 🌸<br/>
-          تواصلي معنا لتفعيل باقتك ومتابعة استقبال الحجوزات
+          جدّدي اشتراكك الآن وفعّلي حسابك فوراً بنفسك
         </p>
-        <div style={{ background:T.white, borderRadius:16, padding:"18px", marginBottom:20, border:`1.5px solid ${T.roseL}` }}>
+        <div style={{ background:T.white, borderRadius:16, padding:"18px", marginBottom:14, border:`1.5px solid ${T.roseL}` }}>
           <div style={{ fontSize:13, fontWeight:700, color:T.ink, marginBottom:8 }}>{salonInfo.name}</div>
-          <div style={{ fontSize:12, color:T.inkSoft }}>الباقة المختارة: {salonInfo.package === "basic" ? "الأساسية" : salonInfo.package === "pro" ? "التوسع" : "النخبة"}</div>
+          <div style={{ fontSize:12, color:T.inkSoft, marginBottom:8 }}>الباقة: {salonInfo.package === "basic" ? "الأساسية" : salonInfo.package === "pro" ? "التوسع" : "النخبة"} ({salonInfo.billing === "yearly" ? "سنوي" : "شهري"})</div>
+          {salonInfo.salon_code && (
+            <div style={{ background:T.cream, borderRadius:10, padding:"8px 12px", marginTop:6 }}>
+              <div style={{ fontSize:10, color:T.inkSoft }}>رقم تسجيل صالونك</div>
+              <div style={{ fontSize:14, fontWeight:800, color:T.roseDp, letterSpacing:1 }}>{salonInfo.salon_code}</div>
+            </div>
+          )}
         </div>
-        <PBtn full onClick={() => window.open("https://wa.me/966552401658?text=" + encodeURIComponent("أرغب بتفعيل باقتي بعد انتهاء التجربة المجانية — صالون: " + salonInfo.name), "_blank")}>
-          💬 تواصلي معنا للتفعيل
+        <PBtn full onClick={() => setShowRenewal(true)}>
+          💳 تجديد الاشتراك الآن — {renewalAmount} ر.س
         </PBtn>
         <div style={{ marginTop:14 }}>
           <span onClick={async () => { await supabase.auth.signOut(); setScreen("client-home") }} style={{ fontSize:12, color:T.inkMuted, cursor:"pointer" }}>تسجيل الخروج</span>
         </div>
       </div>
+
+      {showRenewal && (
+        <MoyasarPaymentModal
+          amount={renewalAmount}
+          description={`تجديد اشتراك — ${salonInfo.name} (رقم: ${salonInfo.salon_code || "—"})`}
+          toast={toast}
+          onClose={() => setShowRenewal(false)}
+          renewalFields={{ salon_code: salonInfo.salon_code }}
+          onSuccess={handleRenewalSuccess}
+        />
+      )}
     </div>
   )
 
@@ -4638,14 +4698,16 @@ function OwnerOffers({ toast, type = "offer" }) {
 function OwnerPackage({ toast, onPkgChange }) {
   const [currentPkg, setCurrentPkg] = useState("pro")
   const [billing, setBilling] = useState("monthly")
+  const [salonCode, setSalonCode] = useState("")
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) return
-      supabase.from('salons').select('package,billing').eq('email', session.user.email).then(({ data }) => {
+      supabase.from('salons').select('package,billing,salon_code').eq('email', session.user.email).then(({ data }) => {
         if (data && data[0]) {
           setCurrentPkg(data[0].package || "pro")
           setBilling(data[0].billing || "monthly")
+          setSalonCode(data[0].salon_code || "")
         }
       })
     })
@@ -4754,6 +4816,12 @@ function OwnerPackage({ toast, onPkgChange }) {
             <div>رقم الآيبان: <strong style={{ color:T.ink, fontSize:13 }}>SA7080000584608016227161</strong></div>
             <div>اسم المستفيد: <strong style={{ color:T.ink }}>بيوتي تيك</strong></div>
           </div>
+          {salonCode && (
+            <div style={{ background:T.white, borderRadius:8, padding:"8px 12px", marginTop:8 }}>
+              <div style={{ fontSize:10, color:T.inkSoft }}>🔑 رقم تسجيل صالونك (احفظيه للتجديد الذاتي)</div>
+              <div style={{ fontSize:14, fontWeight:800, color:T.roseDp, letterSpacing:1 }}>{salonCode}</div>
+            </div>
+          )}
         </div>
 
         {/* إرسال إثبات الدفع */}
