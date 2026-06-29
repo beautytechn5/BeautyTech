@@ -442,7 +442,7 @@ function useSalons() {
         reviews: 0,
         tags: s.bio ? [s.bio.slice(0,20)] : [],
         services: (allServices || [])
-          .filter(sv => sv.salon_id === s.id)
+          .filter(sv => sv.salon_id === s.id && sv.price > 0) // نستثني الخدمات بدون سعر (مُنشأة تلقائياً من تخصص موظفة ولم يُحدَّد سعرها بعد)
           .map(sv => ({ n: sv.name, p: sv.price, dur: sv.duration, timeFrom: sv.time_from, timeTo: sv.time_to, days: sv.days, category: sv.category })),
         wa: (s.phone || "0500000000"),
         mapUrl: s.map_url || "",
@@ -1475,16 +1475,19 @@ function BookingPage({ salon, setScreen }) {
   }
   useEffect(refreshBookedTimes, [date, salon?.id, selectedStaff?.id])
 
-  // جلب فريق الصالون — فقط الموظفات المتخصصات بهذي الخدمة (أو "كل الخدمات")
+  // جلب فريق الصالون — فقط الموظفات اللي تسوين هذي الخدمة بالضبط (أو "كل الخدمات")
   useEffect(() => {
     if (!salon?.id) return
     supabase.from('staff').select('*').eq('salon_id', salon.id).eq('active', true)
       .then(({ data }) => {
         const all = data || []
-        if (!svc?.category) { setStaffList(all); return }
-        setStaffList(all.filter(st => st.specialty === svc.category || st.specialty === "كل الخدمات"))
+        if (!svc?.n) { setStaffList(all); return }
+        setStaffList(all.filter(st => {
+          const list = (st.specialties && st.specialties.length > 0) ? st.specialties : (st.specialty ? [st.specialty] : [])
+          return list.includes(svc.n) || list.includes("كل الخدمات")
+        }))
       })
-  }, [salon?.id, svc?.category])
+  }, [salon?.id, svc?.n])
 
   // حساب أقرب وقت متاح لكل موظفة اليوم (لعرضه بجانب اسمها بقائمة الاختيار)
   useEffect(() => {
@@ -1654,7 +1657,9 @@ function BookingPage({ salon, setScreen }) {
                         style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 12px", borderRadius:10, border:`1.5px solid ${selectedStaff?.id===st.id ? T.roseDp : T.creamDk}`, background:selectedStaff?.id===st.id ? T.roseL : T.white, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
                         <div style={{ textAlign:"right" }}>
                           <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{st.name}</div>
-                          {st.specialty && <div style={{ fontSize:11, color:T.inkSoft }}>{st.specialty}</div>}
+                          {((st.specialties && st.specialties.length > 0) || st.specialty) && (
+                            <div style={{ fontSize:11, color:T.inkSoft }}>{(st.specialties && st.specialties.length > 0 ? st.specialties : [st.specialty]).join(" · ")}</div>
+                          )}
                           {st.rating > 0 && <div style={{ fontSize:10, color:T.gold }}>⭐ {st.rating.toFixed(1)} ({st.rating_count})</div>}
                         </div>
                         <div style={{ fontSize:10, color:nearest ? T.green : T.red, fontWeight:700 }}>
@@ -2788,7 +2793,7 @@ function ManualBookingModal({ salonId, onClose, onCreated, toast }) {
   useEffect(() => {
     const load = async () => {
       const { data } = await supabase.from('services').select('*').eq('salon_id', salonId)
-      setServices((data || []).map(s => ({
+      setServices((data || []).filter(s => s.price > 0).map(s => ({
         id: s.id, name: s.name, price: s.price, category: s.category,
         timeFrom: s.time_from || "09:00", timeTo: s.time_to || "18:00",
       })))
@@ -2799,11 +2804,14 @@ function ManualBookingModal({ salonId, onClose, onCreated, toast }) {
     load()
   }, [salonId])
 
-  // فلترة الموظفات حسب تخصصهم المطابق لتصنيف الخدمة المختارة
+  // فلترة الموظفات حسب الخدمات اللي يسوينها بالضبط (أو "كل الخدمات")
   useEffect(() => {
-    if (!svc?.category) { setStaffList(allStaff); return }
-    setStaffList(allStaff.filter(st => st.specialty === svc.category || st.specialty === "كل الخدمات"))
-  }, [svc?.category, allStaff])
+    if (!svc?.name) { setStaffList(allStaff); return }
+    setStaffList(allStaff.filter(st => {
+      const list = (st.specialties && st.specialties.length > 0) ? st.specialties : (st.specialty ? [st.specialty] : [])
+      return list.includes(svc.name) || list.includes("كل الخدمات")
+    }))
+  }, [svc?.name, allStaff])
 
   // جلب الأوقات المحجوزة — لو فيه موظفة محددة، فقط حجوزاتها هي (يدوي + أونلاين مدمجين)
   const refreshBookedTimes = () => {
@@ -2925,7 +2933,9 @@ function ManualBookingModal({ salonId, onClose, onCreated, toast }) {
                     <button key={st.id} onClick={() => { setStaffId(st.id); setTime("") }}
                       style={{ display:"flex", justifyContent:"space-between", padding:"10px 12px", borderRadius:10, border:`1.5px solid ${staffId===st.id ? T.roseDp : T.creamDk}`, background:staffId===st.id ? T.roseL : T.white, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
                       <span style={{ fontSize:13, fontWeight:700, color:T.ink }}>{st.name}</span>
-                      {st.specialty && <span style={{ fontSize:11, color:T.inkSoft }}>{st.specialty}</span>}
+                      {((st.specialties && st.specialties.length > 0) || st.specialty) && (
+                        <span style={{ fontSize:11, color:T.inkSoft }}>{(st.specialties && st.specialties.length > 0 ? st.specialties : [st.specialty]).join(" · ")}</span>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -4247,6 +4257,52 @@ function OwnerWhatsapp({ toast }) {
 ══════════════════════════════════════════ */
 const DAYS = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"]
 const SERVICE_CATEGORIES = ["قص شعر","صبغ","مكياج","عناية بشرة","أظافر","رموش","حناء","كيراتين"]
+
+// قائمة خدمات شائعة جاهزة — لتسهيل إضافة الخدمة بسرعة بدون كتابة يدوية، مع سعر مقترح يقدر الصالون يعدّله
+const COMMON_SERVICES = {
+  "قص شعر": [
+    { name: "قص شعر بناتي", price: 80 },
+    { name: "قص أطراف", price: 50 },
+    { name: "تصفيف شعر", price: 100 },
+    { name: "بروتين شعر", price: 350 },
+  ],
+  "صبغ": [
+    { name: "صبغة كاملة", price: 250 },
+    { name: "هايلايت", price: 300 },
+    { name: "أمبري", price: 350 },
+    { name: "تغطية شيب", price: 180 },
+  ],
+  "مكياج": [
+    { name: "مكياج سهرة", price: 200 },
+    { name: "مكياج عرايس", price: 600 },
+    { name: "مكياج خفيف", price: 120 },
+  ],
+  "عناية بشرة": [
+    { name: "تنظيف بشرة", price: 150 },
+    { name: "فيشل", price: 200 },
+    { name: "تقشير بشرة", price: 180 },
+  ],
+  "أظافر": [
+    { name: "مناكير", price: 60 },
+    { name: "بديكير", price: 70 },
+    { name: "تركيب أظافر", price: 150 },
+    { name: "جل أظافر", price: 90 },
+  ],
+  "رموش": [
+    { name: "تركيب رموش", price: 120 },
+    { name: "تكثيف رموش", price: 100 },
+    { name: "لمنة رموش", price: 80 },
+  ],
+  "حناء": [
+    { name: "حناء يدين", price: 100 },
+    { name: "حناء عروس", price: 400 },
+  ],
+  "كيراتين": [
+    { name: "كيراتين كامل", price: 400 },
+    { name: "كيراتين أطراف", price: 200 },
+  ],
+}
+
 const ALL_TIMES = ["00:00","00:30","01:00","01:30","02:00","02:30","03:00","03:30","04:00","04:30","05:00","05:30","06:00","06:30","07:00","07:30","08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00","21:30","22:00","22:30","23:00","23:30"]
 
 function OwnerServices({ toast }) {
@@ -4340,7 +4396,7 @@ function OwnerServices({ toast }) {
         timeTo: data[0].time_to || "18:00",
       }])
     }
-    setNewSvc({ name:"", price:"", duration:60, days:["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس"], timeFrom:"09:00", timeTo:"18:00" })
+    setNewSvc({ name:"", price:"", category:"", duration:60, days:["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس"], timeFrom:"09:00", timeTo:"18:00" })
     setShowAdd(false)
     toast("✅ تمت إضافة الخدمة!")
   }
@@ -4379,22 +4435,7 @@ function OwnerServices({ toast }) {
         <Card style={{ padding:18, marginBottom:16, border:`2px solid ${T.roseL}` }}>
           <div style={{ fontSize:14, fontWeight:800, color:T.ink, marginBottom:14 }}>خدمة جديدة</div>
 
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
-            <div>
-              <label style={{ fontSize:12, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:5 }}>اسم الخدمة *</label>
-              <input value={newSvc.name} onChange={e => setNewSvc(s => ({ ...s, name:e.target.value }))}
-                placeholder="مثال: قص شعر" onFocus={() => setFocusF("nm")} onBlur={() => setFocusF(null)}
-                style={{ ...inp("nm"), width:"100%" }} />
-            </div>
-            <div>
-              <label style={{ fontSize:12, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:5 }}>السعر (ر.س) *</label>
-              <input type="number" value={newSvc.price} onChange={e => setNewSvc(s => ({ ...s, price:e.target.value }))}
-                placeholder="150" onFocus={() => setFocusF("pr")} onBlur={() => setFocusF(null)}
-                style={{ ...inp("pr"), width:"100%" }} />
-            </div>
-          </div>
-
-          {/* التصنيف — يربط الخدمة بالموظفات المتخصصات بها */}
+          {/* التصنيف — يربط الخدمة بالموظفات المتخصصات بها، ويفتح قائمة الخدمات الجاهزة */}
           <div style={{ marginBottom:14 }}>
             <label style={{ fontSize:12, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:8 }}>تصنيف الخدمة — يحدد أي موظفات يظهرن لهذي الخدمة</label>
             <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
@@ -4404,6 +4445,36 @@ function OwnerServices({ toast }) {
                   {c}
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* خدمات جاهزة لهذا التصنيف — اختاري بسرعة أو اكتبي اسم خدمتك يدوياً بالأسفل */}
+          {newSvc.category && COMMON_SERVICES[newSvc.category] && (
+            <div style={{ marginBottom:14 }}>
+              <label style={{ fontSize:12, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:8 }}>خدمات شائعة — اضغطي لتعبئة الاسم والسعر تلقائياً</label>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                {COMMON_SERVICES[newSvc.category].map(cs => (
+                  <button key={cs.name} onClick={() => setNewSvc(s => ({ ...s, name: cs.name, price: String(cs.price) }))}
+                    style={{ padding:"6px 12px", borderRadius:10, border:`1.5px solid ${newSvc.name===cs.name ? T.gold : T.creamDk}`, background:newSvc.name===cs.name ? T.goldPale : T.cream, color:newSvc.name===cs.name ? T.gold : T.inkSoft, fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    {cs.name} <span style={{ opacity:0.7 }}>· {cs.price} ر.س</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
+            <div>
+              <label style={{ fontSize:12, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:5 }}>اسم الخدمة *</label>
+              <input value={newSvc.name} onChange={e => setNewSvc(s => ({ ...s, name:e.target.value }))}
+                placeholder="اختاري من الأعلى أو اكتبي اسماً جديداً" onFocus={() => setFocusF("nm")} onBlur={() => setFocusF(null)}
+                style={{ ...inp("nm"), width:"100%" }} />
+            </div>
+            <div>
+              <label style={{ fontSize:12, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:5 }}>السعر (ر.س) *</label>
+              <input type="number" value={newSvc.price} onChange={e => setNewSvc(s => ({ ...s, price:e.target.value }))}
+                placeholder="150" onFocus={() => setFocusF("pr")} onBlur={() => setFocusF(null)}
+                style={{ ...inp("pr"), width:"100%" }} />
             </div>
           </div>
 
@@ -4476,17 +4547,18 @@ function OwnerServices({ toast }) {
 
       <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
         {services.map(sv => (
-          <Card key={sv.id} style={{ padding:16, opacity:sv.active ? 1 : .6, transition:"opacity .2s" }}>
+          <Card key={sv.id} style={{ padding:16, opacity:sv.active ? 1 : .6, transition:"opacity .2s", border: !sv.price ? `2px solid ${T.gold}` : "none" }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
               <div style={{ flex:1 }}>
                 <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
                   <div style={{ fontSize:15, fontWeight:800, color:T.ink }}>{sv.name}</div>
                   {!sv.active && <span style={{ fontSize:10, background:T.redL, color:T.red, padding:"2px 8px", borderRadius:10, fontWeight:700 }}>متوقفة</span>}
+                  {!sv.price && <span style={{ fontSize:10, background:T.goldPale, color:T.gold, padding:"2px 8px", borderRadius:10, fontWeight:700 }}>⚠ بدون سعر — أضيفي السعر</span>}
                 </div>
                 <div style={{ display:"flex", gap:12, fontSize:12, color:T.inkSoft }}>
-                  <span style={{ color:T.gold, fontWeight:700, fontSize:14 }}>{sv.price} ر.س</span>
+                  <span style={{ color:sv.price ? T.gold : T.red, fontWeight:700, fontSize:14 }}>{sv.price ? sv.price + " ر.س" : "بدون سعر"}</span>
                   <span>⏱ {sv.duration < 60 ? sv.duration+"د" : (sv.duration/60)+"س"}</span>
-                  <span style={{ color:T.green, fontWeight:600 }}>🔒 عربون: {Math.round(sv.price*.3)} ر.س</span>
+                  {sv.price > 0 && <span style={{ color:T.green, fontWeight:600 }}>🔒 عربون: {Math.round(sv.price*.3)} ر.س</span>}
                 </div>
               </div>
               <div style={{ display:"flex", gap:6 }}>
@@ -5022,10 +5094,12 @@ function OwnerStaff({ toast }) {
   const [showAdd, setShowAdd] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [salonId, setSalonId] = useState(null)
-  const [form, setForm] = useState({ name:"", specialty:"", days:[], time_from:"09:00", time_to:"18:00" })
+  const [form, setForm] = useState({ name:"", specialties:[], days:[], time_from:"09:00", time_to:"18:00" })
   const [saving, setSaving] = useState(false)
   const [availRequests, setAvailRequests] = useState([])
   const [staffBusyToday, setStaffBusyToday] = useState({})
+  const [salonServices, setSalonServices] = useState([]) // الخدمات الفعلية الموجودة بالصالون — للاختيار السريع
+  const [newSvcInput, setNewSvcInput] = useState("") // لكتابة اسم خدمة جديدة يدوياً
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }))
 
   const ALL_TIMES_STAFF = ["00:00","00:30","01:00","01:30","02:00","02:30","03:00","03:30","04:00","04:30","05:00","05:30","06:00","06:30","07:00","07:30","08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00","21:30","22:00","22:30","23:00","23:30"]
@@ -5087,16 +5161,22 @@ function OwnerStaff({ toast }) {
       setStaff(data || [])
       await loadBusyToday(salon[0].id)
       await loadAvailRequests(salon[0].id)
+      const { data: svcs } = await supabase.from('services').select('id, name').eq('salon_id', salon[0].id)
+      setSalonServices(svcs || [])
     }
     load()
   }, [])
 
-  const resetForm = () => setForm({ name:"", specialty:"", days:[], time_from:"09:00", time_to:"18:00" })
+  const resetForm = () => setForm({ name:"", specialties:[], days:[], time_from:"09:00", time_to:"18:00" })
 
   const startEdit = (s) => {
+    // توافق مع السجلات القديمة اللي عندها specialty (نص واحد) بدل specialties (مصفوفة)
+    const existingSpecialties = s.specialties && s.specialties.length > 0
+      ? s.specialties
+      : (s.specialty ? [s.specialty] : [])
     setForm({
       name: s.name || "",
-      specialty: s.specialty || "",
+      specialties: existingSpecialties,
       days: s.days || [],
       time_from: s.time_from || "09:00",
       time_to: s.time_to || "18:00",
@@ -5111,6 +5191,34 @@ function OwnerStaff({ toast }) {
     resetForm()
   }
 
+  // لكل خدمة بقائمة تخصصات الموظفة، لو ما لها خدمة موجودة بنفس الاسم تماماً، ننشئها تلقائياً بدون سعر
+  // هذا يضمن تطابق الاسم حرفياً بين الموظفة والخدمة، بدون أي اختلاف بالحروف يسبب فصل بينهم بالغلط
+  const ensureServicesExist = async (specialties) => {
+    if (!specialties || specialties.length === 0 || !salonId) return
+    for (const specialty of specialties) {
+      if (!specialty) continue
+      const { data: existing } = await supabase.from('services').select('id').eq('salon_id', salonId).eq('name', specialty)
+      if (existing && existing.length > 0) continue // موجودة فعلاً بنفس الاسم تماماً
+      await supabase.from('services').insert([{
+        salon_id: salonId,
+        name: specialty,
+        price: 0,               // بدون سعر مبدئي — الصالون يدخله بنفسه من شاشة الخدمات
+        category: specialty,
+        active: true,
+        days: ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس"],
+        time_from: "09:00",
+        time_to: "18:00",
+      }])
+    }
+    await loadSalonServices()
+  }
+
+  const loadSalonServices = async () => {
+    if (!salonId) return
+    const { data } = await supabase.from('services').select('id, name').eq('salon_id', salonId)
+    setSalonServices(data || [])
+  }
+
   const saveStaff = async () => {
     if (!form.name) { toast("⚠ أدخلي اسم الموظفة"); return }
     setSaving(true)
@@ -5121,12 +5229,14 @@ function OwnerStaff({ toast }) {
       setSaving(false)
       if (error) { toast("⚠ تعذّر حفظ التعديل: " + error.message); return }
       setStaff(s => s.map(x => x.id === editingId ? { ...x, ...form } : x))
+      await ensureServicesExist(form.specialties)
       toast("✅ تم حفظ تعديل الموظفة!")
     } else {
       const { data, error } = await supabase.from("staff").insert([{ salon_id: salonId, ...form, active:true }]).select()
       setSaving(false)
       if (error) { toast("⚠ تعذّر إضافة الموظفة: " + error.message); return }
       if (data?.[0]) setStaff(s => [...s, data[0]])
+      await ensureServicesExist(form.specialties)
       toast("✅ تمت إضافة الموظفة!")
     }
     cancelForm()
@@ -5200,12 +5310,55 @@ function OwnerStaff({ toast }) {
               style={{ width:"100%", padding:"9px 12px", border:`1.5px solid ${T.creamDk}`, borderRadius:10, fontSize:13, fontFamily:"Tajawal,sans-serif", background:T.cream, color:T.ink, outline:"none" }} />
           </div>
           <div style={{ marginBottom:10 }}>
-            <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:4 }}>التخصص</label>
-            <select value={form.specialty} onChange={set("specialty")}
-              style={{ width:"100%", padding:"9px 12px", border:`1.5px solid ${T.creamDk}`, borderRadius:10, fontSize:13, fontFamily:"Tajawal,sans-serif", background:T.cream, color:T.ink, outline:"none" }}>
-              <option value="">اختاري التخصص</option>
-              {SPECIALTIES.map(s => <option key={s}>{s}</option>)}
-            </select>
+            <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:6 }}>الخدمات اللي تسويها الموظفة *</label>
+
+            {/* الخدمات الموجودة فعلاً بالصالون — اختيار سريع بضغطة */}
+            {salonServices.length > 0 && (
+              <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:8 }}>
+                {salonServices.map(sv => {
+                  const isSelected = form.specialties.includes(sv.name)
+                  return (
+                    <button key={sv.id} onClick={() => setForm(f => ({
+                        ...f,
+                        specialties: isSelected ? f.specialties.filter(x => x !== sv.name) : [...f.specialties, sv.name]
+                      }))}
+                      style={{ padding:"6px 12px", borderRadius:20, border:`1.5px solid ${isSelected ? T.roseDp : T.creamDk}`, background:isSelected ? T.roseL : T.white, color:isSelected ? T.roseDp : T.inkSoft, fontSize:11, fontWeight:isSelected?700:500, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                      {isSelected ? "✓ " : ""}{sv.name}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* الخدمات المختارة المُضافة يدوياً (لو ماهي موجودة بالقائمة أعلاه) تظهر هنا أيضاً */}
+            {form.specialties.filter(s => !salonServices.some(sv => sv.name === s)).map(s => (
+              <div key={s} style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"6px 10px", borderRadius:20, background:T.goldPale, border:`1.5px solid ${T.gold}`, marginBottom:8, marginInlineEnd:6 }}>
+                <span style={{ fontSize:11, color:T.gold, fontWeight:700 }}>✓ {s} (جديدة)</span>
+                <span onClick={() => setForm(f => ({ ...f, specialties: f.specialties.filter(x => x !== s) }))} style={{ cursor:"pointer", color:T.gold, fontSize:12 }}>✕</span>
+              </div>
+            ))}
+
+            {/* كتابة اسم خدمة جديدة يدوياً — تنضاف تلقائياً لقائمة الخدمات بدون سعر */}
+            <div style={{ display:"flex", gap:6 }}>
+              <input value={newSvcInput} onChange={e => setNewSvcInput(e.target.value)}
+                placeholder="اكتبي اسم خدمة جديدة..."
+                onKeyDown={e => {
+                  if (e.key === "Enter" && newSvcInput.trim()) {
+                    e.preventDefault()
+                    setForm(f => f.specialties.includes(newSvcInput.trim()) ? f : { ...f, specialties: [...f.specialties, newSvcInput.trim()] })
+                    setNewSvcInput("")
+                  }
+                }}
+                style={{ flex:1, padding:"9px 12px", border:`1.5px solid ${T.creamDk}`, borderRadius:10, fontSize:13, fontFamily:"Tajawal,sans-serif", background:T.cream, color:T.ink, outline:"none" }} />
+              <button onClick={() => {
+                  if (!newSvcInput.trim()) return
+                  setForm(f => f.specialties.includes(newSvcInput.trim()) ? f : { ...f, specialties: [...f.specialties, newSvcInput.trim()] })
+                  setNewSvcInput("")
+                }}
+                style={{ padding:"9px 16px", borderRadius:10, border:"none", background:T.roseDp, color:T.white, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                + إضافة
+              </button>
+            </div>
           </div>
           <div style={{ marginBottom:10 }}>
             <label style={{ fontSize:11, color:T.inkSoft, display:"block", marginBottom:6 }}>أيام العمل</label>
@@ -5253,7 +5406,9 @@ function OwnerStaff({ toast }) {
                 <div style={{ width:44, height:44, borderRadius:"50%", background:`linear-gradient(135deg,${T.roseL},${T.goldPale})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}>👩</div>
                 <div>
                   <div style={{ fontSize:14, fontWeight:800, color:T.ink }}>{s.name}</div>
-                  {s.specialty && <div style={{ fontSize:12, color:T.roseDp, marginTop:2 }}>✂️ {s.specialty}</div>}
+                  {((s.specialties && s.specialties.length > 0) || s.specialty) && (
+                    <div style={{ fontSize:12, color:T.roseDp, marginTop:2 }}>✂️ {(s.specialties && s.specialties.length > 0 ? s.specialties : [s.specialty]).join(" · ")}</div>
+                  )}
                   {s.days?.length > 0 && <div style={{ fontSize:11, color:T.inkSoft }}>{s.days.join(" · ")}</div>}
                   {s.time_from && <div style={{ fontSize:11, color:T.inkSoft }}>⏰ {s.time_from} — {s.time_to}</div>}
                   {s.rating > 0 && <div style={{ fontSize:11, color:T.gold, marginTop:2 }}>⭐ {Number(s.rating).toFixed(1)} ({s.rating_count} تقييم)</div>}
