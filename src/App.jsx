@@ -2339,6 +2339,30 @@ function OwnerRegister({ setScreen }) {
                   </div>
                 ))}
               </div>
+
+              {/* تفاصيل الباقة المحددة — وش يشمل بالضبط */}
+              {pkg && (
+                <div style={{ background:T.cream, borderRadius:12, padding:"12px 14px", marginBottom:14, border:`1px solid ${T.creamDk}` }}>
+                  <div style={{ fontSize:12, fontWeight:800, color:T.ink, marginBottom:8 }}>
+                    📦 {PKGS.find(p=>p.id===pkg)?.name} — تشمل:
+                  </div>
+                  {PKGS.find(p=>p.id===pkg)?.features.map(f => (
+                    <div key={f} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:T.ink, padding:"3px 0" }}>
+                      <span style={{ color:T.green }}>✓</span> {f}
+                    </div>
+                  ))}
+                  {PKGS.find(p=>p.id===pkg)?.missing.length > 0 && (
+                    <>
+                      <div style={{ height:1, background:T.creamDk, margin:"8px 0" }} />
+                      {PKGS.find(p=>p.id===pkg)?.missing.map(f => (
+                        <div key={f} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:T.inkMuted, padding:"3px 0" }}>
+                          <span style={{ color:T.red }}>✕</span> {f}
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              )}
               {/* خيار شهري / سنوي */}
               <div style={{ display:"flex", gap:8, marginBottom:10 }}>
                 {[
@@ -2929,6 +2953,11 @@ function OwnerLoveGifts({ toast }) {
               <div style={{ fontSize:12, color:T.inkSoft, marginBottom:8 }}>
                 {bk.service_name} · 📅 {bk.appointment_date} · ⏰ {bk.appointment_time}
               </div>
+              {bk.gift_message && (
+                <div style={{ background:"#FCE4EC", borderRadius:10, padding:"8px 12px", marginBottom:10, fontSize:12, color:"#880E4F", fontStyle:"italic" }}>
+                  💬 "{bk.gift_message}"
+                </div>
+              )}
               <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, marginBottom:10 }}>
                 <span style={{ color:T.inkSoft }}>المبلغ الكامل: <span style={{ color:"#E91E63", fontWeight:700 }}>{bk.total_amount} ر.س</span></span>
                 <span style={{ color:T.inkSoft }}>صافيك (90%): <span style={{ color:T.green, fontWeight:700 }}>{salonGet} ر.س</span></span>
@@ -4821,7 +4850,57 @@ function OwnerStaff({ toast }) {
   const [salonId, setSalonId] = useState(null)
   const [form, setForm] = useState({ name:"", specialty:"", days:[], time_from:"09:00", time_to:"18:00" })
   const [saving, setSaving] = useState(false)
+  const [availRequests, setAvailRequests] = useState([])
+  const [staffBusyToday, setStaffBusyToday] = useState({})
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }))
+
+  const ALL_TIMES_STAFF = ["00:00","00:30","01:00","01:30","02:00","02:30","03:00","03:30","04:00","04:30","05:00","05:30","06:00","06:30","07:00","07:30","08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00","21:30","22:00","22:30","23:00","23:30"]
+  const DAY_NAMES_AR_STAFF = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"]
+
+  const getSaudiNow = () => new Date(Date.now() + (3 * 60 * 60 * 1000))
+
+  // أقرب وقت متاح فعلي لموظفة معينة اليوم — نفس منطق صفحة الحجز بالضبط
+  const getNearestSlotForStaff = (staffMember) => {
+    const saudiNow = getSaudiNow()
+    const todayName = DAY_NAMES_AR_STAFF[saudiNow.getUTCDay()]
+    if (staffMember.days && !staffMember.days.includes(todayName)) return null
+    const fi = ALL_TIMES_STAFF.indexOf(staffMember.time_from || "09:00")
+    const ti = ALL_TIMES_STAFF.indexOf(staffMember.time_to || "18:00")
+    if (fi < 0 || ti < 0) return null
+    const dayTimes = ALL_TIMES_STAFF.slice(fi, ti + 1)
+    const busy = staffBusyToday[staffMember.id] || []
+    const nowStr = String(saudiNow.getUTCHours()).padStart(2,"0") + ":" + (saudiNow.getUTCMinutes() < 30 ? "00" : "30")
+    return dayTimes.find(t => !busy.includes(t) && t >= nowStr) || null
+  }
+
+  const loadAvailRequests = async (sId) => {
+    const { data } = await supabase.from('availability_requests')
+      .select('*, staff(name)')
+      .eq('salon_id', sId)
+      .eq('notified', false)
+      .order('created_at', { ascending: false })
+    setAvailRequests(data || [])
+  }
+
+  const loadBusyToday = async (sId) => {
+    const today = getSaudiNow().toISOString().split("T")[0]
+    const { data } = await supabase.from('bookings').select('staff_id, appointment_time')
+      .eq('salon_id', sId)
+      .eq('appointment_date', today)
+      .in('status', ['pending', 'confirmed', 'completed'])
+    const busyByStaff = {}
+    ;(data || []).forEach(b => {
+      if (!b.staff_id) return
+      if (!busyByStaff[b.staff_id]) busyByStaff[b.staff_id] = []
+      busyByStaff[b.staff_id].push(b.appointment_time)
+    })
+    setStaffBusyToday(busyByStaff)
+  }
+
+  const markNotified = async (id) => {
+    await supabase.from('availability_requests').update({ notified: true }).eq('id', id)
+    setAvailRequests(r => r.filter(x => x.id !== id))
+  }
 
   useEffect(() => {
     const load = async () => {
@@ -4832,6 +4911,8 @@ function OwnerStaff({ toast }) {
       setSalonId(salon[0].id)
       const { data } = await supabase.from("staff").select("*").eq("salon_id", salon[0].id)
       setStaff(data || [])
+      await loadBusyToday(salon[0].id)
+      await loadAvailRequests(salon[0].id)
     }
     load()
   }, [])
@@ -4895,6 +4976,46 @@ function OwnerStaff({ toast }) {
         </div>
         <PBtn sm onClick={() => { if (showAdd) { cancelForm() } else { resetForm(); setShowAdd(true) } }}>{showAdd ? "إلغاء" : "+ إضافة"}</PBtn>
       </div>
+
+      {/* تنبيهات توفر الأوقات — العميلات اللي طلبن إشعار وفضى وقت لهن فعلياً */}
+      {availRequests.length > 0 && (
+        <div style={{ marginBottom:16 }}>
+          <div style={{ fontSize:13, fontWeight:700, color:T.ink, marginBottom:8 }}>🔔 طلبات إشعار توفر ({availRequests.length})</div>
+          {availRequests.map(req => {
+            const staffMember = staff.find(s => s.id === req.staff_id)
+            const nearest = staffMember ? getNearestSlotForStaff(staffMember) : null
+            const isAvailableNow = !!nearest
+            return (
+              <Card key={req.id} style={{ padding:"12px 14px", marginBottom:8, border:`1.5px solid ${isAvailableNow ? T.green : T.creamDk}` }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{req.client_name}</div>
+                    <div style={{ fontSize:11, color:T.inkSoft }}>تطلب وقت عند {req.staff?.name || staffMember?.name || "موظفة محذوفة"}</div>
+                  </div>
+                  {isAvailableNow ? (
+                    <span style={{ background:T.greenL, color:T.green, fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20 }}>⚡ متاح الآن: {nearest}</span>
+                  ) : (
+                    <span style={{ background:T.creamDk, color:T.inkSoft, fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20 }}>لا يوجد وقت بعد</span>
+                  )}
+                </div>
+                {isAvailableNow && (
+                  <button onClick={() => {
+                      const waNum = (req.client_phone || "").replace(/^0/, "").replace(/[^0-9]/g, "")
+                      const msg = encodeURIComponent(
+                        `🌸 توفر لك وقت عند ${req.staff?.name || staffMember?.name}!\nالوقت المتاح اليوم: ${nearest}\nيسعدنا حجزك — ردي علينا لتأكيد الموعد 💝`
+                      )
+                      window.open(`https://wa.me/966${waNum}?text=${msg}`, "_blank")
+                      markNotified(req.id)
+                    }}
+                    style={{ width:"100%", padding:"9px", borderRadius:10, border:"none", background:`linear-gradient(135deg,${T.green},#1B5E20)`, color:T.white, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                    💬 إرسال واتساب جاهز الآن
+                  </button>
+                )}
+              </Card>
+            )
+          })}
+        </div>
+      )}
 
       {showAdd && (
         <Card style={{ padding:16, marginBottom:14, border:`2px solid ${T.roseL}` }}>
@@ -6603,6 +6724,7 @@ function GiftPage({ setScreen, salon, setSalon }) {
   useEffect(() => { setSalon(null); setSelectedServices([]) }, [])
   const [recipientName, setRecipientName] = useState("")
   const [recipientPhone, setRecipientPhone] = useState("")
+  const [giftMessage, setGiftMessage] = useState("")
   const [date, setDate] = useState("")
   const [time, setTime] = useState("")
   const [agreed, setAgreed] = useState(false)
@@ -6663,6 +6785,21 @@ function GiftPage({ setScreen, salon, setSalon }) {
   // يُستدعى بعد نجاح الدفع والتحقق منه فعلياً عبر Edge Function
   const handlePaymentSuccess = () => {
     setShowPayment(false)
+
+    // رسالة واتساب للمستلِمة نفسها — تبشّرها بالهدية وتفاصيل موعدها
+    const recipientWaNum = (recipientPhone || "").replace(/^0/, "").replace(/[^0-9]/g, "")
+    if (recipientWaNum) {
+      const giftMsgText = "💝 وصلتك هدية!\n\n" +
+        (giftMessage ? giftMessage + "\n\n" : "") +
+        "تم حجز موعدك في " + salon.name + "\n" +
+        "الخدمة: " + serviceNames + "\n" +
+        "التاريخ: " + date + "\n" +
+        "الوقت: " + time + "\n\n" +
+        "المبلغ مدفوع بالكامل ✨ استمتعي بوقتك!"
+      const giftMsg = encodeURIComponent(giftMsgText)
+      setTimeout(() => window.open(`https://wa.me/966${recipientWaNum}?text=${giftMsg}`, "_blank"), 600)
+    }
+
     // رسالة واتساب للصالون
     if (salon?.wa) {
       const waNum = (salon.wa).replace(/^0/, "").replace(/[^0-9]/g, "")
@@ -6675,7 +6812,7 @@ function GiftPage({ setScreen, salon, setSalon }) {
         "الوقت: " + time + "\n" +
         "المبلغ الكامل مدفوع: " + totalAmount + " ر.س"
       )
-      setTimeout(() => window.open(`https://wa.me/966${waNum}?text=${msg}`, "_blank"), 1000)
+      setTimeout(() => window.open(`https://wa.me/966${waNum}?text=${msg}`, "_blank"), 1400)
     }
     setStep(4)
   }
@@ -6794,6 +6931,11 @@ function GiftPage({ setScreen, salon, setSalon }) {
               <label style={{ fontSize:13, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:7 }}>رقم واتساب المستلِمة <span style={{ color:T.rose }}>*</span></label>
               <input type="tel" placeholder="05xxxxxxxx" value={recipientPhone} onChange={e => setRecipientPhone(e.target.value)} onFocus={() => setFocusF("rp")} onBlur={() => setFocusF(null)} style={inp("rp")} />
             </div>
+            <div style={{ marginBottom:14 }}>
+              <label style={{ fontSize:13, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:7 }}>رسالة الإهداء (اختياري)</label>
+              <textarea placeholder="مثال: هديتك جلسة دلع تستحقينها 💝" value={giftMessage} onChange={e => setGiftMessage(e.target.value)} onFocus={() => setFocusF("gm")} onBlur={() => setFocusF(null)}
+                style={{ ...inp("gm"), minHeight:70, resize:"vertical", fontFamily:"Tajawal,sans-serif" }} />
+            </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
               <div>
                 <label style={{ fontSize:13, fontWeight:700, color:T.inkSoft, display:"block", marginBottom:7 }}>التاريخ <span style={{ color:T.rose }}>*</span></label>
@@ -6857,6 +6999,7 @@ function GiftPage({ setScreen, salon, setSalon }) {
             user_id: userId,
             service_name: serviceNames,
             booking_type: 'love_gift',
+            gift_message: giftMessage || null,
           }}
           onSuccess={handlePaymentSuccess}
         />
