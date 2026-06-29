@@ -3094,6 +3094,10 @@ function OwnerBookings() {
   const [bookings, setBookings] = useState([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState("active")
+  const [typeFilter, setTypeFilter] = useState("all") // all | online | manual | love_gift
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
+  const [search, setSearch] = useState("")
   const [salonId, setSalonId] = useState(null)
   const [showManual, setShowManual] = useState(false)
   const toast = useToast()
@@ -3132,9 +3136,25 @@ function OwnerBookings() {
   }
 
   const filtered = bookings.filter(b => {
-    if (tab === "active")    return b.status === "pending" || b.status === "confirmed"
-    if (tab === "done")      return b.status === "completed"
-    if (tab === "cancelled") return b.status === "cancelled"
+    if (tab === "active")    { if (b.status !== "pending" && b.status !== "confirmed") return false }
+    if (tab === "done")      { if (b.status !== "completed") return false }
+    if (tab === "cancelled") { if (b.status !== "cancelled") return false }
+
+    if (typeFilter === "manual"    && b.booking_type !== "manual") return false
+    if (typeFilter === "love_gift" && b.booking_type !== "love_gift") return false
+    if (typeFilter === "online"    && (b.booking_type === "manual" || b.booking_type === "love_gift")) return false
+
+    if (dateFrom && b.appointment_date < dateFrom) return false
+    if (dateTo && b.appointment_date > dateTo) return false
+
+    if (search) {
+      const s = search.toLowerCase()
+      const matchesName  = (b.client_name || "").toLowerCase().includes(s)
+      const matchesPhone = (b.client_phone || "").includes(s)
+      const matchesStaff = (b.staff_name || "").toLowerCase().includes(s)
+      if (!matchesName && !matchesPhone && !matchesStaff) return false
+    }
+
     return true
   })
 
@@ -3158,6 +3178,46 @@ function OwnerBookings() {
           onCreated={load} />
       )}
 
+      {/* فلتر نوع الحجز — يدوي / أونلاين / إهداء محبة */}
+      <div style={{ display:"flex", gap:6, marginBottom:10, flexWrap:"wrap" }}>
+        {[
+          { id:"all",       label:"الكل",            icon:"📋" },
+          { id:"online",    label:"أونلاين",          icon:"🌐" },
+          { id:"manual",    label:"يدوي",             icon:"🖐️" },
+          { id:"love_gift", label:"إهداء محبة",       icon:"💝" },
+        ].map(f => (
+          <button key={f.id} onClick={() => setTypeFilter(f.id)}
+            style={{ padding:"7px 12px", borderRadius:20, border:`1.5px solid ${typeFilter===f.id ? T.roseDp : T.creamDk}`, background:typeFilter===f.id ? T.roseL : T.white, color:typeFilter===f.id ? T.roseDp : T.inkSoft, fontSize:11, fontWeight:typeFilter===f.id ? 700 : 400, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+            {f.icon} {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* بحث وفلترة بالتاريخ — للرجوع لأي حجز قديم بسهولة */}
+      <div style={{ background:T.white, borderRadius:12, padding:"10px 12px", marginBottom:10, border:`1px solid ${T.creamDk}` }}>
+        <input value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="🔍 ابحثي باسم العميلة، جوالها، أو اسم الموظفة..."
+          style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.creamDk}`, borderRadius:8, fontSize:12, fontFamily:"Tajawal,sans-serif", background:T.cream, outline:"none", marginBottom:8 }} />
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+          <div>
+            <label style={{ fontSize:10, color:T.inkSoft, display:"block", marginBottom:3 }}>من تاريخ</label>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+              style={{ width:"100%", padding:"7px 8px", border:`1px solid ${T.creamDk}`, borderRadius:8, fontSize:12, fontFamily:"Tajawal,sans-serif", background:T.cream }} />
+          </div>
+          <div>
+            <label style={{ fontSize:10, color:T.inkSoft, display:"block", marginBottom:3 }}>إلى تاريخ</label>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+              style={{ width:"100%", padding:"7px 8px", border:`1px solid ${T.creamDk}`, borderRadius:8, fontSize:12, fontFamily:"Tajawal,sans-serif", background:T.cream }} />
+          </div>
+        </div>
+        {(search || dateFrom || dateTo || typeFilter !== "all") && (
+          <button onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setTypeFilter("all") }}
+            style={{ marginTop:8, fontSize:11, color:T.roseDp, background:"none", border:"none", cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+            ✕ إلغاء كل الفلاتر
+          </button>
+        )}
+      </div>
+
       <div style={{ display:"flex", background:T.white, borderRadius:12, overflow:"hidden", marginBottom:14, border:`1px solid ${T.creamDk}` }}>
         {[
           { id:"active",    label:"الفعّالة",  icon:"🟢", count: bookings.filter(b => b.status==="pending"||b.status==="confirmed").length },
@@ -3172,7 +3232,7 @@ function OwnerBookings() {
       </div>
 
       {loading && <div style={{ textAlign:"center", padding:40, color:T.inkSoft }}>...جاري التحميل</div>}
-      {!loading && filtered.length === 0 && <Empty icon="📅" title="لا توجد حجوزات" desc="ستظهر هنا فور بدء الاستقبال" />}
+      {!loading && filtered.length === 0 && <Empty icon="📅" title="لا توجد حجوزات" desc="جرّبي تغيير الفلاتر" />}
 
       <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
         {filtered.map(bk => {
