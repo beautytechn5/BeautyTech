@@ -255,19 +255,25 @@ function Empty({ icon, title, desc }) {
 }
 
 /* ── Terms Modal ── */
-function TermsModal({ open, onClose }) {
+/* ══════════════════════════════════════════
+   📋 TERMS MODALS — منفصلة تماماً حسب السياق
+   شروط الصالون والعميلة (تظهر وقت حجز/تسجيل العميل)
+══════════════════════════════════════════ */
+function ClientTermsModal({ open, onClose }) {
   if (!open) return null
   const items = [
-    { t:"١. طبيعة المنصة", b:"بيوتي تيك وسيط تقني يربط العملاء بالصالونات. الصالون مسؤول بالكامل عن صحة بياناته وجودة خدماته." },
-    { t:"٢. الحجز والعربون", b:"يُشترط دفع عربون 30% عند الحجز. العربون غير مسترد عند الإلغاء، ويُخصم من الفاتورة النهائية." },
-    { t:"٣. تعديل المواعيد", b:"يحق للعميلة تعديل موعدها مرة واحدة فقط قبل 24 ساعة من الموعد." },
-    { t:"٤. الخصوصية", b:"تلتزم المنصة بحماية بيانات المستخدمين وعدم مشاركتها مع أطراف ثالثة." },
+    { t:"١. توزيع العربون", b:"العربون المدفوع من العميلة (30% من قيمة الخدمة): 10% عمولة للمنصة، والباقي (20%) يُحوَّل للصالون." },
+    { t:"٢. الحجز والعربون", b:"يُشترط دفع عربون 30% عند الحجز. العربون غير مسترد عند إلغاء العميلة، ويُخصم من الفاتورة النهائية." },
+    { t:"٣. الإلغاء من الصالون", b:"إذا ألغى الصالون الموعد، يُرد العربون كاملاً للعميلة فوراً." },
+    { t:"٤. تعديل المواعيد", b:"يحق للعميلة تعديل موعدها مرة واحدة فقط قبل 24 ساعة من الموعد." },
+    { t:"٥. الشفافية في التسعير", b:"يُحظر على الصالون تغيير الأسعار بعد الحجز أو إضافة رسوم غير معلنة." },
+    { t:"٦. الخصوصية", b:"تلتزم المنصة بحماية بيانات المستخدمين وعدم مشاركتها مع أطراف ثالثة." },
   ]
   return (
     <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(44,32,24,.5)", zIndex:3000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
       <div onClick={e => e.stopPropagation()} style={{ background:T.white, borderRadius:"24px 24px 0 0", width:"100%", maxWidth:560, maxHeight:"85vh", overflow:"hidden", display:"flex", flexDirection:"column" }}>
         <div style={{ padding:"18px 22px", borderBottom:`1px solid ${T.creamDk}`, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
-          <div style={{ fontSize:16, fontWeight:800, color:T.ink }}>الشروط والأحكام</div>
+          <div style={{ fontSize:16, fontWeight:800, color:T.ink }}>الشروط والأحكام — للعميلة</div>
           <button onClick={onClose} style={{ width:32, height:32, borderRadius:"50%", border:"none", background:T.cream, color:T.inkSoft, fontSize:15, cursor:"pointer" }}>✕</button>
         </div>
         <div style={{ overflowY:"auto", padding:"18px 22px", flex:1 }}>
@@ -278,7 +284,47 @@ function TermsModal({ open, onClose }) {
             </div>
           ))}
           <div style={{ background:T.goldPale, borderRadius:12, padding:"12px 16px", fontSize:12, color:T.inkSoft }}>
-            📌 بالتسجيل فأنتِ توافقين على جميع الشروط أعلاه.
+            📌 بالحجز أو التسجيل فأنتِ توافقين على جميع الشروط أعلاه.
+          </div>
+        </div>
+        <div style={{ padding:"14px 22px", borderTop:`1px solid ${T.creamDk}` }}>
+          <PBtn full onClick={onClose}>فهمت — إغلاق</PBtn>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* شروط المنصة والصالون (تظهر فقط وقت تسجيل صالون جديد) */
+function SalonTermsModal({ open, onClose }) {
+  if (!open) return null
+  const items = [
+    { t:"١. رسوم التأسيس", b:"تُدفع رسوم تأسيس مرة واحدة عند الانضمام للمنصة وإعداد الحساب." },
+    { t:"٢. رسوم الاشتراك", b:"تُدفع رسوم الاشتراك الشهرية أو السنوية حسب الباقة المختارة. الاشتراك السنوي يوفر شهراً مجانياً." },
+    { t:"٣. التجربة المجانية", b:"تُمنح تجربة مجانية لمدة 14 يوماً للصالون الجديد، مرة واحدة فقط لكل صالون." },
+    { t:"٤. عمولة المنصة", b:"تأخذ المنصة عمولة 10% من قيمة كل خدمة مُنجزة عبر الحجز الأونلاين، تُخصم من العربون. مثال: خدمة 200 ر.س → عربون 60 ر.س → عمولة 20 ر.س → يُحوَّل للصالون 40 ر.س." },
+    { t:"٥. عمولة الحجز اليدوي", b:"للحجوزات اليدوية (عميلة حاضرة تدفع كاش)، تستحق المنصة 3% من قيمة الخدمة، يُحوِّلها الصالون ضمن التسوية اليومية." },
+    { t:"٦. موعد التحويل", b:"تُحوَّل مستحقات الصالون يومياً في نهاية كل يوم." },
+    { t:"٧. ترقية/تخفيض الباقة", b:"يمكن الترقية في أي وقت بدفع الفرق + 100 ر.س. التخفيض فقط بعد انتهاء الاشتراك الحالي." },
+    { t:"٨. التزامات الصالون", b:"تحديث حالة الحجوزات بانتظام، وعدم نشر محتوى مضلل أو مخالف للأنظمة." },
+    { t:"٩. إيقاف الخدمة", b:"للمنصة الحق بإيقاف أي حساب مخالف للشروط بعد إشعار مسبق." },
+  ]
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(44,32,24,.5)", zIndex:3000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background:T.white, borderRadius:"24px 24px 0 0", width:"100%", maxWidth:560, maxHeight:"85vh", overflow:"hidden", display:"flex", flexDirection:"column" }}>
+        <div style={{ padding:"18px 22px", borderBottom:`1px solid ${T.creamDk}`, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
+          <div style={{ fontSize:16, fontWeight:800, color:T.ink }}>الشروط والأحكام — للصالون</div>
+          <button onClick={onClose} style={{ width:32, height:32, borderRadius:"50%", border:"none", background:T.cream, color:T.inkSoft, fontSize:15, cursor:"pointer" }}>✕</button>
+        </div>
+        <div style={{ overflowY:"auto", padding:"18px 22px", flex:1 }}>
+          {items.map((s, i) => (
+            <div key={i} style={{ marginBottom:16, paddingBottom:16, borderBottom:i < items.length-1 ? `1px solid ${T.creamDk}` : "none" }}>
+              <div style={{ fontSize:13, fontWeight:800, color:T.roseDp, marginBottom:6 }}>{s.t}</div>
+              <p style={{ fontSize:13, color:T.inkSoft, lineHeight:1.8 }}>{s.b}</p>
+            </div>
+          ))}
+          <div style={{ background:T.goldPale, borderRadius:12, padding:"12px 16px", fontSize:12, color:T.inkSoft }}>
+            📌 بالتسجيل كصالون فأنتِ توافقين على جميع الشروط أعلاه.
           </div>
         </div>
         <div style={{ padding:"14px 22px", borderTop:`1px solid ${T.creamDk}` }}>
@@ -1539,7 +1585,7 @@ function BookingPage({ salon, setScreen }) {
 
   return (
     <div style={{ background:T.cream, minHeight:"100vh", paddingBottom:40 }}>
-      <TermsModal open={termsOpen} onClose={() => setTermsOpen(false)} type="salon-client" />
+      <ClientTermsModal open={termsOpen} onClose={() => setTermsOpen(false)} />
       {/* Header */}
       <div style={{ background:T.white, borderBottom:`1px solid ${T.roseL}`, padding:"14px 20px", display:"flex", alignItems:"center", gap:12, position:"sticky", top:0, zIndex:100 }}>
         <button onClick={() => setScreen("client-home")} style={{ width:36, height:36, borderRadius:"50%", border:"none", background:T.cream, cursor:"pointer", fontSize:16 }}>←</button>
@@ -1807,7 +1853,7 @@ function ClientRegister({ setScreen }) {
 
   return (
     <div style={{ background:T.cream, minHeight:"100vh", paddingBottom:40 }}>
-      <TermsModal open={termsOpen} onClose={() => setTermsOpen(false)} />
+      <ClientTermsModal open={termsOpen} onClose={() => setTermsOpen(false)} />
       <div style={{ background:T.white, borderBottom:`1px solid ${T.roseL}`, padding:"14px 20px", display:"flex", alignItems:"center", gap:12 }}>
         <button onClick={() => setScreen("client-home")} style={{ width:36, height:36, borderRadius:"50%", border:"none", background:T.cream, cursor:"pointer", fontSize:16 }}>←</button>
         <div style={{ fontSize:16, fontWeight:800, color:T.ink }}>إنشاء حساب عميلة</div>
@@ -2248,7 +2294,7 @@ function OwnerRegister({ setScreen }) {
 
   return (
     <div style={{ background:T.cream, minHeight:"100vh", paddingBottom:40 }}>
-      <TermsModal open={termsOpen} onClose={() => setTermsOpen(false)} />
+      <SalonTermsModal open={termsOpen} onClose={() => setTermsOpen(false)} />
       <div style={{ background:T.white, borderBottom:`1px solid ${T.roseL}`, padding:"14px 20px", display:"flex", alignItems:"center", gap:12, position:"sticky", top:0, zIndex:100 }}>
         <button onClick={() => step === 1 ? setScreen("client-home") : setStep(1)} style={{ width:36, height:36, borderRadius:"50%", border:"none", background:T.cream, cursor:"pointer", fontSize:16 }}>←</button>
         <div style={{ flex:1 }}>
@@ -8061,13 +8107,39 @@ function AdminSalonsList({ salonsList, onUpdate }) {
     s.email?.toLowerCase().includes(search.toLowerCase())
   )
 
-  const changePkg = async (sid, pkg) => {
+  // الصالونات اللي اشتراكها بينتهي خلال 3 أيام أو أقل (وما زال نشطاً، مو متوقف فعلاً)
+  const expiringSoon = salonsList.filter(s => {
+    if (!s.subscription_end) return false
+    const daysLeft = Math.ceil((new Date(s.subscription_end) - new Date()) / (1000*60*60*24))
+    return daysLeft >= 0 && daysLeft <= 3
+  }).sort((a,b) => new Date(a.subscription_end) - new Date(b.subscription_end))
+
+  const sendRenewalReminder = (salon) => {
+    const daysLeft = Math.ceil((new Date(salon.subscription_end) - new Date()) / (1000*60*60*24))
+    const waNum = (salon.phone || "").replace(/^0/, "").replace(/[^0-9]/g, "")
+    const msg = encodeURIComponent(
+      `🌸 تذكير من بيوتي تيك\n\n` +
+      `صالون ${salon.name}، اشتراكك بباقة ${salon.package === "basic" ? "الأساسية" : salon.package === "pro" ? "التوسع" : "النخبة"} ` +
+      (daysLeft === 0 ? "ينتهي اليوم!" : `ينتهي بعد ${daysLeft} ${daysLeft === 1 ? "يوم" : "أيام"} (${salon.subscription_end}).`) +
+      `\n\nيرجى التجديد لضمان استمرار ظهور صالونك للعميلات بدون انقطاع 💝`
+    )
+    if (waNum) window.open(`https://wa.me/966${waNum}?text=${msg}`, "_blank")
+  }
+
+  const changePkg = async (salon, pkg) => {
     setSaving(true)
-    // عند تفعيل/تغيير الباقة من المدير، نلغي قفل التجربة المنتهية
-    const { error } = await supabase.from("salons").update({ package: pkg, trial_end: null }).eq("id", sid)
+    // عند تفعيل/تغيير الباقة من المدير، نلغي قفل التجربة المنتهية ونحدد تاريخ انتهاء الاشتراك
+    const subEnd = new Date()
+    if (salon.billing === "yearly") subEnd.setFullYear(subEnd.getFullYear() + 1)
+    else subEnd.setMonth(subEnd.getMonth() + 1)
+    const { error } = await supabase.from("salons").update({
+      package: pkg,
+      trial_end: null,
+      subscription_end: subEnd.toISOString().split("T")[0],
+    }).eq("id", salon.id)
     setSaving(false)
     if (error) { toast("⚠ حدث خطأ: " + error.message); return }
-    toast("✅ تم تغيير الباقة وتفعيل الحساب!")
+    toast("✅ تم تغيير الباقة وتفعيل الحساب حتى " + subEnd.toLocaleDateString("ar-SA") + "!")
     setEditId(null)
     setNewPkg("")
     onUpdate()   // يعيد جلب القائمة من Supabase
@@ -8119,6 +8191,33 @@ function AdminSalonsList({ salonsList, onUpdate }) {
         </div>
       </div>
 
+      {/* تنبيه انتهاء الاشتراكات القريبة */}
+      {expiringSoon.length > 0 && (
+        <div style={{ marginBottom:16 }}>
+          <div style={{ fontSize:13, fontWeight:700, color:"#E65100", marginBottom:8 }}>⏰ اشتراكات قاربت على الانتهاء ({expiringSoon.length})</div>
+          {expiringSoon.map(s => {
+            const daysLeft = Math.ceil((new Date(s.subscription_end) - new Date()) / (1000*60*60*24))
+            return (
+              <Card key={s.id} style={{ padding:"12px 14px", marginBottom:8, border:"1.5px solid #FFB74D" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{s.name}</div>
+                    <div style={{ fontSize:11, color:T.inkSoft }}>{s.phone}</div>
+                  </div>
+                  <span style={{ background:daysLeft===0?"#FFEBEE":"#FFF3E0", color:daysLeft===0?T.red:"#E65100", fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20 }}>
+                    {daysLeft === 0 ? "ينتهي اليوم!" : `باقي ${daysLeft} ${daysLeft===1?"يوم":"أيام"}`}
+                  </span>
+                </div>
+                <button onClick={() => sendRenewalReminder(s)}
+                  style={{ width:"100%", padding:"9px", borderRadius:10, border:"none", background:"linear-gradient(135deg,#25D366,#1FA855)", color:T.white, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
+                  💬 إرسال تذكير واتساب
+                </button>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+
       {/* بحث */}
       <input value={search} onChange={e => setSearch(e.target.value)}
         placeholder="ابحث باسم أو جوال أو إيميل..."
@@ -8159,6 +8258,11 @@ function AdminSalonsList({ salonsList, onUpdate }) {
                 🎁 صالون مُرشَّح — تفعيله يمنح المُرشِّحة 200 ر.س تلقائياً
               </div>
             )}
+            {s.subscription_end && (
+              <div style={{ fontSize:11, color:T.inkSoft, marginBottom:10 }}>
+                📅 الاشتراك ينتهي: <strong style={{ color:T.ink }}>{s.subscription_end}</strong>
+              </div>
+            )}
 
             {/* تغيير الباقة */}
             {editId === s.id ? (
@@ -8177,7 +8281,7 @@ function AdminSalonsList({ salonsList, onUpdate }) {
                     style={{ flex:1, padding:"9px", borderRadius:10, border:`1px solid ${T.creamDk}`, background:T.white, color:T.inkSoft, fontSize:12, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
                     إلغاء
                   </button>
-                  <button onClick={() => newPkg && changePkg(s.id, newPkg)} disabled={!newPkg || saving}
+                  <button onClick={() => newPkg && changePkg(s, newPkg)} disabled={!newPkg || saving}
                     style={{ flex:2, padding:"9px", borderRadius:10, border:"none", background:newPkg ? T.roseDp : T.creamDk, color:T.white, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"Tajawal,sans-serif" }}>
                     {saving ? "...جاري" : "✓ تأكيد التغيير"}
                   </button>

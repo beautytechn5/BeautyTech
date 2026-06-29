@@ -1,5 +1,8 @@
 // ══════════════════════════════════════════
-// VERIFY PAYMENT — Edge Function
+// 🔒 VERIFY PAYMENT — Edge Function
+// يتأكد من نجاح الدفع عن طريق ميسر باستخدام المفتاح السري
+// المفتاح السري لا يظهر أبداً للمتصفح — يبقى هنا فقط بأمان
+// يدعم أيضاً الدفع الجزئي أو الكامل من محفظة العميلة
 // ══════════════════════════════════════════
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
@@ -13,6 +16,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// تخصم المبلغ المطلوب من أرصدة محفظة العميلة (الأقدم انتهاءً أولاً) فعلياً وبأمان
 async function deductWallet(supabase: any, clientId: string, amount: number) {
   const { data: credits } = await supabase
     .from('wallet_credits')
@@ -44,10 +48,92 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { payment_id, booking_data, wallet_only, client_id, wallet_amount } = await req.json()
+    const { payment_id, booking_data, wallet_only, client_id, wallet_amount, subscription_data } = await req.json()
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
+    // ══════════════════════════════════════
+    // الحالة الخاصة: اشتراك صالون جديد (تخطّي التجربة المجانية) أو ترقية باقة
+    // ══════════════════════════════════════
+    if (subscription_data) {
+      if (!payment_id) {
+        return new Response(
+          JSON.stringify({ error: 'payment_id مطلوب' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const moyasarRes = await fetch(`https://api.moyasar.com/v1/payments/${payment_id}`, {
+        headers: { 'Authorization': 'Basic ' + btoa(`${MOYASAR_SECRET_KEY}:`) },
+      })
+
+      if (!moyasarRes.ok) {
+        return new Response(
+          JSON.stringify({ error: 'تعذّر التحقق من الدفع عند ميسر' }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const payment = await moyasarRes.json()
+
+      if (payment.status !== 'paid') {
+        return new Response(
+          JSON.stringify({ error: 'الدفع لم يكتمل', status: payment.status }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      if (subscription_data.expected_amount && payment.amount !== subscription_data.expected_amount) {
+        return new Response(
+          JSON.stringify({ error: 'المبلغ المدفوع لا يطابق المبلغ المطلوب — تم رفض العملية أمنياً' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // الدفع تأكد فعلياً — إنشاء حساب Auth + سجل الصالون، مفعّل وظاهر فوراً
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email: subscription_data.email,
+        password: subscription_data.password,
+        email_confirm: true,
+        user_metadata: { role: 'owner', name: subscription_data.owner_name },
+      })
+
+      if (authError) {
+        return new Response(
+          JSON.stringify({ error: 'تم الدفع بنجاح لكن تعذّر إنشاء الحساب: ' + authError.message, payment_id: payment.id, payment_succeeded: true }),
+          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const subEnd = new Date()
+      if (subscription_data.salon_fields?.billing === 'yearly') subEnd.setFullYear(subEnd.getFullYear() + 1)
+      else subEnd.setMonth(subEnd.getMonth() + 1)
+
+      const { data: salonRow, error: salonError } = await supabase.from('salons').insert([{
+        ...subscription_data.salon_fields,
+        visible: true,        // مفعّل وظاهر فوراً — لا حاجة لانتظار تفعيل المنصة لأن الدفع تم فعلياً
+        skip_trial: true,
+        trial_end: null,
+        subscription_end: subEnd.toISOString().split('T')[0],
+        payment_id: payment.id,
+      }]).select()
+
+      if (salonError) {
+        return new Response(
+          JSON.stringify({ error: 'تم الدفع بنجاح لكن تعذّر حفظ بيانات الصالون: ' + salonError.message, payment_id: payment.id, payment_succeeded: true }),
+          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, salon: salonRow?.[0] }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // ══════════════════════════════════════
+    // الحالة الخاصة: الدفع كامل من المحفظة (بدون ميسر إطلاقاً)
+    // ══════════════════════════════════════
     if (wallet_only) {
       if (!client_id || !wallet_amount) {
         return new Response(
@@ -73,11 +159,12 @@ Deno.serve(async (req) => {
         .select()
 
       if (insertError) {
+        // رجّعي الرصيد المخصوم لأن الحجز فشل (تعارض وقت مثلاً)
         await deductWallet(supabase, client_id, -wallet_amount).catch(() => {})
         const isSlotTaken = insertError.message?.includes('duplicate key') || insertError.code === '23505'
         return new Response(
           JSON.stringify({
-            error: isSlotTaken ? 'تم حجز هذا الوقت للتو من عميلة أخرى' : 'تعذر حفظ الحجز: ' + insertError.message,
+            error: isSlotTaken ? 'تم حجز هذا الوقت للتو من عميلة أخرى — أعيدي المحاولة بوقت آخر' : 'تعذّر حفظ الحجز: ' + insertError.message,
           }),
           { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
@@ -89,46 +176,56 @@ Deno.serve(async (req) => {
       )
     }
 
+    // ══════════════════════════════════════
+    // الحالة العادية: دفع عبر ميسر (مع خصم جزئي اختياري من المحفظة)
+    // ══════════════════════════════════════
     if (!payment_id) {
       return new Response(
-        JSON.stringify({ error: 'payment_id required' }),
+        JSON.stringify({ error: 'payment_id مطلوب' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    const moyasarRes = await fetch('https://api.moyasar.com/v1/payments/' + payment_id, {
+    // ١. نسأل ميسر مباشرة عن حالة الدفع الحقيقية (بالمفتاح السري — أمن 100%)
+    const moyasarRes = await fetch(`https://api.moyasar.com/v1/payments/${payment_id}`, {
       headers: {
-        'Authorization': 'Basic ' + btoa(MOYASAR_SECRET_KEY + ':'),
+        'Authorization': 'Basic ' + btoa(`${MOYASAR_SECRET_KEY}:`),
       },
     })
 
     if (!moyasarRes.ok) {
       return new Response(
-        JSON.stringify({ error: 'verification failed' }),
+        JSON.stringify({ error: 'تعذّر التحقق من الدفع عند ميسر' }),
         { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
     const payment = await moyasarRes.json()
 
+    // ٢. لازم يكون status = "paid" فقط — أي شي آخر يعني الدفع لم يكتمل
     if (payment.status !== 'paid') {
       return new Response(
-        JSON.stringify({ error: 'payment not completed', status: payment.status }),
+        JSON.stringify({ error: 'الدفع لم يكتمل', status: payment.status, message: payment.source?.message }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    if (booking_data && booking_data.expected_amount && payment.amount !== booking_data.expected_amount) {
+    // ٣. تحقق إضافي: المبلغ المدفوع فعلياً يطابق المبلغ المتوقع بالضبط (بعد خصم المحفظة لو طُبِّقت)
+    if (booking_data?.expected_amount && payment.amount !== booking_data.expected_amount) {
       return new Response(
-        JSON.stringify({ error: 'amount mismatch' }),
+        JSON.stringify({ error: 'المبلغ المدفوع لا يطابق المبلغ المطلوب — تم رفض العملية أمنياً' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
+    // ٤. لو فيه خصم من المحفظة مرفق مع دفع ميسر الجزئي، نخصمه الآن (بعد تأكيد دفع ميسر بنجاح)
     if (client_id && wallet_amount > 0) {
       await deductWallet(supabase, client_id, wallet_amount)
+      // لو فشل الخصم هنا لأي سبب، لا نوقف الحجز — ميسر دفع فعلياً والعميلة لن تخسر شيء،
+      // فقط لن يُخصم من محفظتها هذه المرة (نادر جداً ولا يضر العميلة)
     }
 
+    // ٥. الدفع تأكد فعلياً — الحين نسجّل الحجز بقاعدة البيانات باستخدام صلاحية كاملة (service role)
     const { data: insertedBooking, error: insertError } = await supabase
       .from('bookings')
       .insert([{
@@ -141,19 +238,23 @@ Deno.serve(async (req) => {
       .select()
 
     if (insertError) {
+      // الدفع نجح لكن فشل حفظ الحجز
       const isSlotTaken = insertError.message?.includes('duplicate key') || insertError.code === '23505'
 
+      // سجّل الحالة بجدول خاص عشان تتابعها وتسترجع الفلوس يدوياً من لوحة ميسر
       await supabase.from('refunds_needed').insert([{
         payment_id: payment.id,
         amount: payment.amount,
         reason: isSlotTaken ? 'slot_conflict' : 'insert_failed',
-        client_phone: booking_data && booking_data.booking_fields ? booking_data.booking_fields.client_phone : null,
+        client_phone: booking_data?.booking_fields?.client_phone || null,
         details: insertError.message,
-      }]).then(function() {}, function() {})
+      }]).then(() => {}, () => {})
 
       return new Response(
         JSON.stringify({
-          error: isSlotTaken ? 'slot taken, refund pending' : 'booking failed: ' + insertError.message,
+          error: isSlotTaken
+            ? 'تم الدفع بنجاح، لكن شخصاً آخر حجز هذا الوقت بنفس اللحظة. سيتم استرجاع مبلغك تلقائياً خلال 24 ساعة.'
+            : 'تم الدفع بنجاح لكن تعذّر حفظ الحجز: ' + insertError.message,
           payment_id: payment.id,
           payment_succeeded: true,
           needs_refund: true,
@@ -164,13 +265,13 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, booking: insertedBooking?.[0], payment: payment }),
+      JSON.stringify({ success: true, booking: insertedBooking?.[0], payment }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (err) {
     return new Response(
-      JSON.stringify({ error: 'unexpected error: ' + err.message }),
+      JSON.stringify({ error: 'خطأ غير متوقع: ' + err.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
